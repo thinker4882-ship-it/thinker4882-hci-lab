@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Fitts 포인팅 과제</title>
+<style>
+  body { font-family: sans-serif; text-align: center; background: #f4f4f4; }
+  #playArea {
+    position: relative;
+    width: 960px; height: 400px;
+    margin: 20px auto;
+    background: white;
+    border: 1px solid #ccc;
+  }
+  .target {
+    position: absolute;
+    border-radius: 50%;
+    background: #3366cc;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+  }
+  .startBtn {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 12px 20px;
+    font-size: 16px;
+  }
+  #status { font-size: 14px; color: #555; }
+  #csvOutput {
+    display: none;
+    width: 900px; height: 200px;
+    margin: 12px auto;
+    font-family: monospace;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <h2>Fitts 포인팅 과제</h2>
+  <p>좌우로 번갈아 나타나는 원을 최대한 빠르고 정확하게 클릭하세요.</p>
+  <div id="status">시작 전</div>
+  <div id="playArea"></div>
+  <button id="showCsvBtn" style="display:none;">결과 CSV 보기</button>
+  <p id="csvHint" style="display:none; font-size:13px; color:#555;">아래 상자를 길게 눌러 전체 선택 후 복사하세요.</p>
+  <textarea id="csvOutput" readonly></textarea>
+
+<script>
+// ===== 실험 설계 상수 =====
+// A: 표적 사이 거리(px), W: 표적 지름(px). 3수준 x 3수준 = 9조건.
+const A_LEVELS = [150, 300, 450];
+const W_LEVELS = [20, 50, 100];
+const REPS_PER_CONDITION = 10; // 조건당 기록할 이동(움직임) 횟수
+
+const playArea = document.getElementById('playArea');
+const statusEl = document.getElementById('status');
+const showCsvBtn = document.getElementById('showCsvBtn');
+const csvHint = document.getElementById('csvHint');
+const csvOutput = document.getElementById('csvOutput');
+
+let conditions = [];   // 이 실험에서 돌 9개 조건의 순서(셔플됨)
+let condIndex = 0;     // 현재 몇 번째 조건인지
+let repIndex = 0;      // 현재 조건에서 몇 번째 이동인지 (0이면 아직 기록 전 첫 이동)
+let currentSide = 'L'; // 다음 표적이 나타날 위치(L/R)
+let lastAppearTime = 0; // 마지막으로 표적이 나타난 시각(ms)
+let currentA = 0, currentW = 0;
+let results = []; // 기록된 시행들의 배열
+
+// 배열을 무작위로 섞는다 (Fisher-Yates)
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// 9개 조건(A x W) 조합을 만들고 순서를 섞는다
+function buildConditions() {
+  const list = [];
+  for (const A of A_LEVELS) {
+    for (const W of W_LEVELS) {
+      list.push({ A, W });
+    }
+  }
+  return shuffle(list);
+}
+
+// 표적을 playArea 중앙 기준 좌/우에 배치하고 화면에 그린다
+let targetCx = 0, targetCy = 0; // 현재 표적의 중심 좌표(빗나간 클릭도 이 좌표 기준으로 hit/miss 판정)
+function showTarget(side, A, W) {
+  const cx = playArea.clientWidth / 2;
+  const cy = playArea.clientHeight / 2;
+  const x = side === 'L' ? cx - A / 2 : cx + A / 2;
+  const el = document.createElement('div');
+  el.className = 'target';
+  el.style.width = W + 'px';
+  el.style.height = W + 'px';
+  el.style.left = x + 'px';
+  el.style.top = cy + 'px';
+  targetCx = x;
+  targetCy = cy;
+  playArea.innerHTML = '';
+  playArea.appendChild(el);
+  lastAppearTime = performance.now();
+}
+
+// 현재 조건의 상태 메시지를 갱신한다
+function updateStatus() {
+  statusEl.textContent =
+    `조건 ${condIndex + 1}/${conditions.length}  |  이동 ${repIndex}/${REPS_PER_CONDITION}  |  A=${currentA}px W=${currentW}px`;
+}
+
+// 다음 조건으로 넘어가거나, 모든 조건이 끝났으면 실험을 종료한다
+function nextCondition() {
+  if (condIndex >= conditions.length) {
+    finishExperiment();
+    return;
+  }
+  currentA = conditions[condIndex].A;
+  currentW = conditions[condIndex].W;
+  repIndex = 0;
+  currentSide = Math.random() < 0.5 ? 'L' : 'R';
+  updateStatus();
+  // 조건이 바뀔 때마다 중앙 시작 버튼을 눌러야 다음 표적이 나온다 (이전 조건 위치 영향 차단)
+  const btn = document.createElement('button');
+  btn.className = 'startBtn';
+  btn.textContent = '다음 조건 시작';
+  btn.onclick = () => {
+    playArea.innerHTML = '';
+    showTarget(currentSide, currentA, currentW);
+  };
+  playArea.innerHTML = '';
+  playArea.appendChild(btn);
+}
+
+// playArea 클릭을 처리한다: 표적 안이든 밖이든 한 번의 시행으로 기록한다
+function handleClick(evt) {
+  if (evt.target.classList.contains('startBtn')) return; // 조건 시작 버튼은 시행이 아님
+
+  const now = performance.now();
+  const mt = now - lastAppearTime; // 이동시간(ms)
+  const rect = playArea.getBoundingClientRect();
+  const clickX = evt.clientX - rect.left;
+  const clickY = evt.clientY - rect.top;
+  const dist = Math.hypot(clickX - targetCx, clickY - targetCy);
+  const hit = dist <= currentW / 2 ? 1 : 0;
+
+  repIndex++;
+  // 조건이 바뀐 직후 첫 이동은 직전 조건 위치의 영향을 받으므로 기록하지 않는다.
+  // 여기서는 매 조건마다 중앙 시작 버튼에서 첫 표적으로 이동한 뒤부터 기록한다.
+  results.push({
+    condition: condIndex + 1, A: currentA, W: currentW, rep: repIndex,
+    side: currentSide, mt_ms: mt.toFixed(1), hit
+  });
+
+  currentSide = currentSide === 'L' ? 'R' : 'L';
+  updateStatus();
+
+  if (repIndex >= REPS_PER_CONDITION) {
+    condIndex++;
+    nextCondition();
+  } else {
+    showTarget(currentSide, currentA, currentW);
+  }
+}
+
+// 실험을 시작한다: 조건 목록을 만들고 첫 조건을 배정한다
+function startExperiment() {
+  conditions = buildConditions();
+  condIndex = 0;
+  results = [];
+  nextCondition();
+}
+
+// 실험 종료: 상태 메시지를 바꾸고 CSV 보기 버튼을 켠다
+function finishExperiment() {
+  statusEl.textContent = '완료! 아래 버튼을 눌러 CSV를 확인하세요.';
+  playArea.innerHTML = '';
+  showCsvBtn.style.display = 'inline-block';
+}
+
+// 기록된 시행들을 CSV 문자열로 만들어 화면의 textarea에 띄운다.
+// 파일 자동 다운로드 대신 복사 방식을 쓰는 이유: 샌드박스 웹뷰(예: 태블릿 접속 환경)에서
+// 스크립트 트리거 다운로드가 막히는 경우가 많기 때문. (log2(A/W+1)는 다음 단계에서 직접 계산할 것)
+function showCSV() {
+  const header = 'condition,A,W,rep,side,mt_ms,hit\n';
+  const rows = results.map(r =>
+    `${r.condition},${r.A},${r.W},${r.rep},${r.side},${r.mt_ms},${r.hit}`
+  );
+  const csv = header + rows.join('\n');
+  csvOutput.value = csv;
+  csvOutput.style.display = 'block';
+  csvHint.style.display = 'block';
+  csvOutput.focus();
+  csvOutput.select();
+}
+
+playArea.addEventListener('click', handleClick);
+showCsvBtn.addEventListener('click', showCSV);
+startExperiment();
+</script>
+</body>
+</html>

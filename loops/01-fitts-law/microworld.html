@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Fitts 마이크로월드 — pointing_task.html 뜯어보기</title>
+<style>
+  /* 배포용 코드가 아니라 이해를 위한 장난감이므로 꾸밈은 최소화, 가독성 위주 */
+  body { font-family: -apple-system, "Malgun Gothic", sans-serif; max-width: 980px; margin: 20px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.3rem; }
+  p.desc { color: #555; line-height: 1.5; }
+  .layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .controls { flex: 0 0 220px; }
+  .controls label { display: block; margin-bottom: 14px; font-size: 0.9rem; }
+  .controls input[type=range] { width: 100%; }
+  .idBox { margin-top: 10px; padding: 10px; background: #eef4ff; border-radius: 6px; font-size: 0.95rem; }
+  .idBox b { font-size: 1.2rem; color: #1a4fd6; }
+  button { padding: 8px 12px; margin-top: 8px; cursor: pointer; }
+
+  .playWrap { flex: 1 1 500px; }
+  .playArea { position: relative; width: 100%; max-width: 760px; height: 320px; background: #fafafa; border: 1px solid #ccc; overflow: hidden; }
+  .target { position: absolute; border-radius: 50%; background: #333; transform: translate(-50%, -50%); }
+  .target.hit { background: #2e7d32; }
+  .target.miss { background: #c62828; }
+  #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  .state { flex: 0 0 220px; }
+  .flow .step { padding: 6px 8px; margin-bottom: 4px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; color: #888; background: #fff; }
+  .flow .step.active { background: #fff3cd; border-color: #e0a800; color: #333; font-weight: bold; }
+  table.vars { width: 100%; font-size: 0.85rem; border-collapse: collapse; margin-top: 10px; }
+  table.vars td { border-bottom: 1px solid #eee; padding: 3px 4px; }
+  table.vars td:first-child { color: #666; }
+
+  .log { margin-top: 24px; }
+  table.log-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.log-table th, table.log-table td { border: 1px solid #ddd; padding: 4px 6px; text-align: center; }
+  table.log-table th { background: #f0f0f0; }
+</style>
+</head>
+<body>
+
+<h1>Fitts 마이크로월드 — pointing_task.html이 실행되는 걸 눈으로 보기</h1>
+<p class="desc">
+  이건 실험용 코드가 아니라 <b>pointing_task.html의 알고리즘을 체감하기 위한 놀이터</b>다.
+  실제 코드처럼 9조건·10반복 같은 고정 프로토콜은 없고, A(거리)·W(표적폭)를 슬라이더로 바로 조절하면서
+  <code>showTarget → 클릭 → handleClick</code> 흐름이 실시간으로 어떻게 도는지, 그리고 클릭 좌표가
+  hit/miss 판정에 어떻게 쓰이는지를 직접 눌러보며 확인하는 용도다.
+</p>
+
+<div class="layout">
+  <div class="controls">
+    <label>A — 거리 (px): <span id="aVal">200</span>
+      <input type="range" id="aSlider" min="60" max="450" value="200" step="10">
+    </label>
+    <label>W — 표적 폭 (px): <span id="wVal">50</span>
+      <input type="range" id="wSlider" min="10" max="150" value="50" step="5">
+    </label>
+    <div class="idBox">
+      ID = log₂(A/W + 1)<br>
+      = <b id="idVal">-</b> bit
+      <div style="font-size:0.78rem; color:#666; margin-top:4px;">
+        (난이도 지수. A 늘리거나 W 줄이면 어떻게 움직이는지 슬라이더로 확인해보기)
+      </div>
+    </div>
+    <button id="resetBtn">기록 초기화</button>
+  </div>
+
+  <div class="playWrap">
+    <div class="playArea" id="playArea">
+      <svg id="overlay"></svg>
+    </div>
+    <p style="font-size:0.8rem; color:#777;">표적을 클릭해보기. 표적 밖을 클릭해도(= miss) 기록된다 — 실제 handleClick과 동일.</p>
+  </div>
+
+  <div class="state">
+    <h3 style="margin-bottom:6px;">알고리즘 상태</h3>
+    <div class="flow">
+      <div class="step" id="step-show">① showTarget()<br><small>표적 그리기 + lastAppearTime 기록</small></div>
+      <div class="step" id="step-wait">② 클릭 대기</div>
+      <div class="step" id="step-handle">③ handleClick()<br><small>mt 계산 · dist 계산 · hit 판정</small></div>
+    </div>
+    <table class="vars">
+      <tr><td>side</td><td id="v-side">-</td></tr>
+      <tr><td>targetCx, Cy</td><td id="v-center">-</td></tr>
+      <tr><td>마지막 클릭 좌표</td><td id="v-click">-</td></tr>
+      <tr><td>dist (클릭-중심)</td><td id="v-dist">-</td></tr>
+      <tr><td>mt (ms)</td><td id="v-mt">-</td></tr>
+      <tr><td>hit</td><td id="v-hit">-</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="log">
+  <h3>시행 기록 (results 배열, 실시간)</h3>
+  <table class="log-table">
+    <thead><tr><th>#</th><th>A</th><th>W</th><th>side</th><th>mt(ms)</th><th>dist</th><th>hit</th></tr></thead>
+    <tbody id="logBody"></tbody>
+  </table>
+</div>
+
+<script>
+// ── 원본 pointing_task.html의 전역 상태를 그대로 흉내낸다 ──
+let A = 200, W = 50;
+let side = 'R';           // 다음 표적이 나올 쪽 (원본 handleClick의 side 토글과 동일 개념)
+let targetCx = 0, targetCy = 0;
+let lastAppearTime = 0;
+let results = [];
+
+const playArea = document.getElementById('playArea');
+const overlay = document.getElementById('overlay');
+
+/** ID = log2(A/W + 1) — Fitts 난이도 지수를 계산해 슬라이더 옆에 실시간 표시 */
+function updateID() {
+  const id = Math.log2(A / W + 1);
+  document.getElementById('idVal').textContent = id.toFixed(2);
+}
+
+/** 잠깐 강조했다가 원래대로 돌리는 헬퍼 — 알고리즘 단계 하이라이트용 */
+function flashStep(id) {
+  document.querySelectorAll('.flow .step').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/** 원본 showTarget()과 동일한 로직: 중앙 기준 A/2 떨어진 위치에 지름 W 원을 그린다 */
+function showTarget() {
+  flashStep('step-show');
+  const rect = playArea.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const offset = A / 2;
+  targetCx = side === 'L' ? cx - offset : cx + offset;
+  targetCy = cy;
+
+  overlay.innerHTML = ''; // 이전 시행의 선/원 지우기
+
+  let el = playArea.querySelector('.target');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'target';
+    playArea.appendChild(el);
+  }
+  el.className = 'target';
+  el.style.width = W + 'px';
+  el.style.height = W + 'px';
+  el.style.left = targetCx + 'px';
+  el.style.top = targetCy + 'px';
+
+  lastAppearTime = performance.now();
+  document.getElementById('v-side').textContent = side;
+  document.getElementById('v-center').textContent = `${targetCx.toFixed(0)}, ${targetCy.toFixed(0)}`;
+
+  setTimeout(() => flashStep('step-wait'), 150);
+}
+
+/** 원본 handleClick()과 동일한 로직: mt·dist·hit 계산 후 기록, 시각화, 다음 표적 표시 */
+function handleClick(evt) {
+  flashStep('step-handle');
+  const rect = playArea.getBoundingClientRect();
+  const clickX = evt.clientX - rect.left;
+  const clickY = evt.clientY - rect.top;
+
+  const mt = performance.now() - lastAppearTime;
+  const dist = Math.sqrt((clickX - targetCx) ** 2 + (clickY - targetCy) ** 2);
+  const hit = dist <= W / 2 ? 1 : 0;
+
+  // 시각 피드백: 클릭점→중심 선, 반지름(W/2) 점선 원
+  overlay.innerHTML = `
+    <line x1="${clickX}" y1="${clickY}" x2="${targetCx}" y2="${targetCy}"
+          stroke="${hit ? '#2e7d32' : '#c62828'}" stroke-width="2" />
+    <circle cx="${targetCx}" cy="${targetCy}" r="${W / 2}"
+            fill="none" stroke="#999" stroke-dasharray="4,3" />
+    <circle cx="${clickX}" cy="${clickY}" r="4" fill="${hit ? '#2e7d32' : '#c62828'}" />
+    <text x="${(clickX + targetCx) / 2 + 6}" y="${(clickY + targetCy) / 2}" font-size="11" fill="#333">
+      dist=${dist.toFixed(0)}
+    </text>
+  `;
+
+  const el = playArea.querySelector('.target');
+  el.classList.add(hit ? 'hit' : 'miss');
+
+  results.push({ A, W, side, mt, dist, hit });
+  appendLogRow(results.length, A, W, side, mt, dist, hit);
+
+  document.getElementById('v-click').textContent = `${clickX.toFixed(0)}, ${clickY.toFixed(0)}`;
+  document.getElementById('v-dist').textContent = dist.toFixed(1);
+  document.getElementById('v-mt').textContent = mt.toFixed(1);
+  document.getElementById('v-hit').textContent = hit;
+
+  side = side === 'L' ? 'R' : 'L'; // 원본과 동일: 다음 표적은 반대쪽
+  setTimeout(showTarget, 300);
+}
+
+/** 시행 기록 테이블에 한 줄 추가 */
+function appendLogRow(n, A, W, side, mt, dist, hit) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${n}</td><td>${A}</td><td>${W}</td><td>${side}</td>
+                   <td>${mt.toFixed(1)}</td><td>${dist.toFixed(1)}</td>
+                   <td style="color:${hit ? '#2e7d32' : '#c62828'}">${hit}</td>`;
+  document.getElementById('logBody').prepend(tr);
+}
+
+// ── 슬라이더: 값이 바뀌면 "즉각" 새 표적으로 반영 (원본에는 없는, 놀이터 전용 기능) ──
+document.getElementById('aSlider').addEventListener('input', e => {
+  A = Number(e.target.value);
+  document.getElementById('aVal').textContent = A;
+  updateID();
+  showTarget();
+});
+document.getElementById('wSlider').addEventListener('input', e => {
+  W = Number(e.target.value);
+  document.getElementById('wVal').textContent = W;
+  updateID();
+  showTarget();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  results = [];
+  document.getElementById('logBody').innerHTML = '';
+});
+
+playArea.addEventListener('click', handleClick);
+
+// 시작
+updateID();
+showTarget();
+</script>
+</body>
+</html>
