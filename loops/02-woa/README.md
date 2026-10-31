@@ -16,7 +16,7 @@
 | `woa_analysis.py` | CSV 분석 스크립트 |
 | `microworld.html` | WOA 놀이터 |
 | `QUIZ.md` | 이해 확인 퀴즈 |
-| `pilot_p2.csv` | 정웅 님 1차 시험 데이터 (설계자가 직접 푼 것이라 결과에 넣지 않는다) |
+| `pilot_p1.csv`, `pilot_p2.csv` | 정웅 님 시험 데이터 (설계자가 직접 푼 것이라 결과에 넣지 않는다) |
 
 ## 실행
 - 실험: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa/woa_task.html
