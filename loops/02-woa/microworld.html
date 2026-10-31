@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WOA 놀이터</title>
+<style>
+  body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 16px; }
+  #app { max-width: 640px; margin: 0 auto; background: white; padding: 24px; border: 1px solid #ccc; }
+  label { display: block; margin-top: 14px; }
+  input[type=range] { width: 100%; }
+  svg { width: 100%; height: 80px; margin-top: 16px; }
+  .big { font-size: 28px; margin: 4px 0; }
+  .warn { background: #fdf0d5; padding: 10px; margin-top: 12px; display: none; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  td { padding: 4px 0; border-top: 1px solid #eee; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h2>WOA 놀이터</h2>
+  <p>슬라이더를 움직여 분모가 작아질 때 WOA가 어떻게 되는지 보세요. 정답은 1000으로 고정입니다.</p>
+  <label>초기 응답: <b id="v초기"></b><input type="range" id="초기" min="600" max="1400" value="900"></label>
+  <label>AI 조언: <b id="v조언"></b><input type="range" id="조언" min="600" max="1400" value="1020"></label>
+  <label>최종 응답: <b id="v최종"></b><input type="range" id="최종" min="600" max="1400" value="960"></label>
+  <svg id="선" viewBox="0 0 600 80"></svg>
+  <p class="big">WOA = <span id="woa"></span></p>
+  <p id="잘림"></p>
+  <div class="warn" id="경고"></div>
+  <table>
+    <tr><td>조언 범주</td><td id="범주"></td></tr>
+    <tr><td>조언과 초기값 차이</td><td id="차이"></td></tr>
+    <tr><td>초기 오차 → 최종 오차</td><td id="오차"></td></tr>
+  </table>
+</div>
+<script>
+const 정답 = 1000;
+const 칸 = id => document.getElementById(id);
+
+/** 값을 수직선의 x 좌표로 바꾼다. */
+function x좌표(값) {
+  return 20 + (값 - 600) / 800 * 560;
+}
+
+/** 수직선 위에 점 하나와 이름을 그린다. */
+function 점(값, 이름, 색, 높이) {
+  return `<circle cx="${x좌표(값)}" cy="44" r="6" fill="${색}"/>
+    <text x="${x좌표(값)}" y="${높이}" text-anchor="middle" font-size="13" fill="${색}">${이름}</text>`;
+}
+
+/** 조언이 어느 범주인지 돌려준다. */
+function 범주(조언) {
+  const 거리 = Math.abs(조언 - 정답) / 정답;
+  if (거리 <= 0.03) return "맞는 조언 (정답 3% 이내)";
+  if (거리 >= 0.2) return "틀린 조언 (정답과 20% 이상)";
+  return "사용 안 함 (3~20% 구간)";
+}
+
+/** 슬라이더 값을 읽어 화면 전체를 갱신한다. */
+function 갱신() {
+  const 초기 = +칸("초기").value, 조언 = +칸("조언").value, 최종 = +칸("최종").value;
+  칸("v초기").textContent = 초기; 칸("v조언").textContent = 조언; 칸("v최종").textContent = 최종;
+  칸("선").innerHTML = `<line x1="20" y1="44" x2="580" y2="44" stroke="#999"/>`
+    + 점(정답, "정답", "#555", 72) + 점(초기, "초기", "#3366cc", 26)
+    + 점(조언, "조언", "#cc5500", 14) + 점(최종, "최종", "#228833", 26);
+  const 분모 = 조언 - 초기, 차이 = Math.abs(분모) / 정답;
+  칸("차이").textContent = `${(차이 * 100).toFixed(1)}%`;
+  칸("범주").textContent = 범주(조언);
+  칸("오차").textContent = `${(Math.abs(초기 - 정답) / 10).toFixed(1)}% → ${(Math.abs(최종 - 정답) / 10).toFixed(1)}%`;
+  if (분모 === 0) {
+    칸("woa").textContent = "계산 불가";
+    칸("잘림").textContent = "분모가 0입니다.";
+  } else {
+    const w = (최종 - 초기) / 분모, 잘린 = Math.min(Math.max(w, 0), 1);
+    칸("woa").textContent = w.toFixed(2);
+    칸("잘림").textContent = `0~1로 자르면 ${잘린.toFixed(2)}`;
+  }
+  칸("경고").style.display = 차이 < 0.02 ? "block" : "none";
+  칸("경고").textContent = "차이가 2% 미만입니다. 실험 페이지라면 여기서 조언을 조정합니다.";
+}
+
+["초기", "조언", "최종"].forEach(id => 칸(id).addEventListener("input", 갱신));
+갱신();
+</script>
+</body>
+</html>
