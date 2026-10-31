@@ -10,8 +10,7 @@
   .progress { font-size: 14px; color: #555; }
   .advice { background: #eef3fb; padding: 12px; margin: 12px 0; }
   .value { font-size: 28px; text-align: center; margin: 8px 0; }
-  input[type=range] { width: 100%; }
-  .ends { display: flex; justify-content: space-between; font-size: 13px; color: #555; }
+  .value input { width: 160px; font-size: 24px; padding: 6px; text-align: right; }
   label { display: block; margin: 6px 0; }
   button { margin-top: 16px; padding: 10px 20px; font-size: 16px; }
   textarea { width: 100%; height: 160px; font-family: monospace; font-size: 12px; box-sizing: border-box; }
@@ -23,7 +22,7 @@
 <script>
 // 실행 중에 바뀌는 값은 전부 여기에 모은다.
 let 화면 = "시작", 참가자 = null, 표시집단 = false;
-let 순서 = [], 위치 = 0, 현재 = {}, 시작시각 = 0, 움직임 = false, 초기시간 = 0;
+let 순서 = [], 위치 = 0, 현재 = {}, 시작시각 = 0, 초기시간 = 0;
 const records = [];
 const app = document.getElementById("app");
 
@@ -65,7 +64,7 @@ function 문제_시작() {
 function 조언_정하기(q, 초기값) {
   if (Math.abs(q.preset - 초기값) / q.answer >= 0.02) return q.preset;
   if (q.correct) {
-    // 정답 ±3% 양 끝 중 초기값에서 먼 쪽. 슬라이더 칸에 맞추되 3%를 넘지 않게 안쪽으로 내린다.
+    // 정답 ±3% 양 끝 중 초기값에서 먼 쪽. 조언 단위(step)에 맞추되 3%를 넘지 않게 안쪽으로 내린다.
     const 위 = Math.floor(q.answer * 1.03 / q.step) * q.step;
     const 아래 = Math.ceil(q.answer * 0.97 / q.step) * q.step;
     return Math.abs(위 - 초기값) >= Math.abs(아래 - 초기값) ? 위 : 아래;
@@ -75,18 +74,16 @@ function 조언_정하기(q, 초기값) {
   return Math.round((q.preset + 방향 * q.answer * 0.05) / q.step) * q.step;
 }
 
-/** 슬라이더 HTML을 만든다. */
-function 슬라이더(q, 값) {
-  return `<div class="value"><span id="값">${값}</span> ${q.unit}</div>
-    <input type="range" id="슬라이더" min="${q.min}" max="${q.max}" step="${q.step}" value="${값}"
-      oninput="슬라이더_기록()">
-    <div class="ends"><span>${q.min}</span><span>${q.max}</span></div>`;
+/** 숫자 입력칸 HTML을 만든다. inputmode: 패드·휴대폰에서 숫자 키패드를 띄운다. */
+function 입력칸(q, 값) {
+  return `<div class="value"><input type="number" id="입력" min="1" inputmode="decimal" value="${값}"> ${q.unit}</div>`;
 }
 
-/** 슬라이더가 움직이면 숫자를 갱신하고 움직임을 표시한다. */
-function 슬라이더_기록() {
-  움직임 = true;
-  document.getElementById("값").textContent = document.getElementById("슬라이더").value;
+/** 입력칸의 값을 숫자로 읽는다. 0보다 큰 숫자가 아니면 경고하고 null. */
+function 입력값_읽기() {
+  const 값 = Number(document.getElementById("입력").value);
+  if (!(값 > 0)) { alert("0보다 큰 숫자를 입력해 주세요."); return null; }
+  return 값;
 }
 
 /** 라디오 보기 묶음의 HTML을 만든다. */
@@ -97,7 +94,6 @@ function 보기_목록(이름, 보기들) {
 /** 지금 화면 상태에 맞게 페이지를 그린다. */
 function 화면_그리기() {
   시작시각 = performance.now();
-  움직임 = false;
   const 진행 = `<p class="progress">${위치 + 1} / ${문제들.length}</p>`;
   const 다음 = `<button onclick="다음_누름()">다음</button>`;
   if (화면 === "시작") {
@@ -106,14 +102,13 @@ function 화면_그리기() {
       <p>참가자 번호: <input id="번호" type="number" min="1"></p>
       <button onclick="시작하기()">시작</button>`;
   } else if (화면 === "초기") {
-    const 가운데 = 현재.min + Math.round((현재.max - 현재.min) / 2 / 현재.step) * 현재.step;
-    app.innerHTML = `${진행}<h3>${현재.text}</h3><p>먼저 내 추정값을 정해 주세요.</p>${슬라이더(현재, 가운데)}${다음}`;
+    app.innerHTML = `${진행}<h3>${현재.text}</h3><p>먼저 내 추정값을 입력해 주세요.</p>${입력칸(현재, "")}${다음}`;
   } else if (화면 === "최종") {
     const 확신도 = 표시집단 ? `<br>AI 확신도: <b>${현재.conf}%</b>` : "";
     app.innerHTML = `${진행}<h3>${현재.text}</h3>
       <div class="advice">내 처음 추정: <b>${현재.초기} ${현재.unit}</b><br>
       AI 조언: <b>${현재.보여줄조언} ${현재.unit}</b>${확신도}</div>
-      <p>최종 답을 정해 주세요.</p>${슬라이더(현재, 현재.초기)}${다음}`;
+      <p>최종 답을 입력해 주세요. 그대로 두면 처음 추정이 최종 답이 됩니다.</p>${입력칸(현재, 현재.초기)}${다음}`;
   } else if (화면 === "점검") {
     const 문항2 = 표시집단
       ? `<p><b>AI 조언 옆의 70%는 무슨 뜻이라고 이해했나요?</b></p>${보기_목록("점검2", 점검2_보기)}` : "";
@@ -136,15 +131,18 @@ function 고른_보기(이름) {
 /** 화면에 따라 값을 기록하고 다음 화면으로 넘어간다. */
 function 다음_누름() {
   if (화면 === "초기") {
-    현재.초기 = Number(document.getElementById("슬라이더").value);
+    const 초기 = 입력값_읽기();
+    if (초기 === null) return;
+    현재.초기 = 초기;
     초기시간 = 시간_재기();
     현재.보여줄조언 = 조언_정하기(현재, 현재.초기);
     화면 = "최종";
     화면_그리기();
   } else if (화면 === "최종") {
-    const 최종 = Number(document.getElementById("슬라이더").value);
+    const 최종 = 입력값_읽기();
+    if (최종 === null) return;
     records.push([참가자, 현재.id, 위치 + 1, 표시집단, 현재.conf, 현재.answer, 현재.초기, 최종, 현재.preset,
-      현재.보여줄조언, 현재.correct, 현재.min, 현재.max, 초기시간, 시간_재기(), 움직임]);
+      현재.보여줄조언, 현재.correct, 초기시간, 시간_재기(), 최종 !== 현재.초기]);
     위치 += 1;
     if (위치 < 순서.length) { 문제_시작(); } else { 화면 = "점검"; 화면_그리기(); }
   } else if (화면 === "점검") {
@@ -159,7 +157,7 @@ function 다음_누름() {
 /** 기록을 CSV로 만들어 보여주고, 복사·다운로드 버튼을 단다. */
 function CSV_저장() {
   const 머리글 = "참가자번호,문제ID,제시순서,확신도표시여부,확신도수치,정답,초기응답값,최종응답값,미리정한조언값,"
-    + "보여준조언값,조언맞음여부,슬라이더최소,슬라이더최대,초기화면시간ms,최종화면시간ms,슬라이더움직임여부,점검1,점검2";
+    + "보여준조언값,조언맞음여부,초기화면시간ms,최종화면시간ms,최종값변경여부,점검1,점검2";
   const csv = [머리글, ...records.map(줄 => 줄.join(","))].join("\n");
   const 주소 = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));  // ﻿: 엑셀 한글 깨짐 방지
   app.innerHTML = `<h3>끝났습니다. 감사합니다!</h3><p>아래 결과를 실험자에게 보내 주세요.</p>
