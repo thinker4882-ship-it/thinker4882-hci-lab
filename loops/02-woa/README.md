@@ -22,7 +22,7 @@
 ## 실행
 - 실험: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa/woa_task.html
 - 놀이터: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa.html
-- 분석: `py woa_analysis.py pilot_p2.csv`
+- 분석: `py woa_analysis.py data_1a.csv data_1b.csv`
 
 코드를 고치면 `docs/02-woa/`에도 복사해야 링크에 반영된다.
 
