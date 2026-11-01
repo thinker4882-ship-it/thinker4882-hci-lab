@@ -17,6 +17,7 @@
 | `microworld.html` | WOA 놀이터 |
 | `QUIZ.md` | 이해 확인 퀴즈 |
 | `pilot_p1.csv`, `pilot_p2.csv` | 정웅 님 시험 데이터 (설계자가 직접 푼 것이라 결과에 넣지 않는다) |
+| `data_1a.csv`, `data_1b.csv` | 본 수집 원본. 두 사람이 모두 1번을 입력했다 (둘 다 미표시 집단, 배정표의 1·3번 몫으로 친다) |
 
 ## 실행
 - 실험: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa/woa_task.html
