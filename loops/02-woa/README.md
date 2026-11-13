@@ -13,6 +13,7 @@
 | `DESIGN.md` | 설계 문답 기록과 최종 설계 |
 | `EXPLAIN.md` | 코드 설명서 |
 | `woa_task.html`, `questions.js` | 실험 페이지. 두 파일이 같은 폴더에 있어야 돌아간다 |
+| `woa_task_v2.html`, `questions_v2.js` | modify 실험 (생활 물가, 틀린 조언 = 초기값에서 정답 반대쪽 20%). 가격 확인 전이라 시작 화면에 경고가 뜬다 |
 | `woa_analysis.py` | CSV 분석 스크립트 |
 | `microworld.html` | WOA 놀이터 |
 | `QUIZ.md` | 이해 확인 퀴즈 |
@@ -25,10 +26,11 @@
 
 ## 실행
 - 실험: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa/woa_task.html
+- modify 실험: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa/woa_task_v2.html
 - 놀이터: https://thinker4882-ship-it.github.io/thinker4882-hci-lab/02-woa.html
 - 분석: `py woa_analysis.py data_1a.csv data_1b.csv data_2a.csv data_2b.csv`
 
 코드를 고치면 `docs/02-woa/`에도 복사해야 링크에 반영된다.
 
 ## 상태
-빌드, 1차 시험, 문제 정답 검토까지 완료. 데이터 수집, 분석, modify, 회고가 남았다. (체크리스트는 Notion 트래커)
+빌드, 시험, 본 수집(2:2), 분석, modify 설계·구현까지 완료. modify 가격 확인, modify 수집·분석, 회고가 남았다. (체크리스트는 Notion 트래커)

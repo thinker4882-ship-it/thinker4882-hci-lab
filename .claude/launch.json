@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "woa", "runtimeExecutable": "py", "runtimeArgs": ["-m", "http.server", "8765", "--directory", "loops/02-woa"], "port": 8765 }
+  ]
+}
