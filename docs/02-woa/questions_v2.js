@@ -18,28 +18,29 @@ const 기준_시점 = "2026년 11월";
 
 // 문제 16개. 가격대별로 틀린 조언 1개씩 (M-15, 무작위 배정).
 // answer = 정답(원), conf = 확신도, step = 조언값을 반올림할 단위(원).
-// checked = 정웅 님이 공식 출처에서 가격을 확인했는가. false인 answer는 Claude 추정 임시값이다.
+// checked = 정웅 님이 공식 출처에서 가격을 확인했는가 (11/13 정웅 님 확인표로 16개 모두 확인).
+// text는 확인한 가격의 기준(모델·용량·결제 방식)과 똑같이 적는다. 다르면 참가자가 다른 물건을 떠올린다.
 const 문제들 = [
   // 천 원대
-  { id: "S01", text: "편의점 빙그레 바나나맛우유(240ml) 1개", answer: 1700, correct: true, conf: 84, step: 10, checked: false },
-  { id: "S02", text: "편의점 코카콜라(500ml 페트) 1병", answer: 2300, correct: false, conf: 75, step: 10, checked: false },
-  { id: "S03", text: "편의점 참이슬 후레쉬(360ml) 1병", answer: 1950, correct: true, conf: 78, step: 10, checked: false },
-  { id: "S04", text: "서울 중형택시 기본요금(낮)", answer: 4800, correct: true, conf: 86, step: 10, checked: false },
-  { id: "S05", text: "메가MGC커피 아메리카노(HOT) 1잔", answer: 1700, correct: true, conf: 80, step: 10, checked: false },
-  { id: "S06", text: "맥도날드 빅맥 단품 1개", answer: 5700, correct: true, conf: 76, step: 10, checked: false },
+  { id: "S01", text: "편의점 빙그레 바나나맛우유(240ml 단지) 1개", answer: 1800, correct: true, conf: 84, step: 10, checked: true },
+  { id: "S02", text: "편의점 코카콜라(500ml 페트) 1병", answer: 2400, correct: false, conf: 75, step: 10, checked: true },
+  { id: "S03", text: "편의점 참이슬 후레쉬(360ml 병) 1병", answer: 1900, correct: true, conf: 78, step: 10, checked: true },
+  { id: "S04", text: "서울 중형택시 주간 기본요금", answer: 4800, correct: true, conf: 86, step: 10, checked: true },
+  { id: "S05", text: "메가MGC커피 아이스 아메리카노 1잔", answer: 2000, correct: true, conf: 80, step: 10, checked: true },
+  { id: "S06", text: "맥도날드 빅맥 단품 1개", answer: 5700, correct: true, conf: 76, step: 10, checked: true },
   // 만 원대
-  { id: "S07", text: "넷플릭스 스탠다드 요금제 한 달", answer: 13500, correct: false, conf: 58, step: 100, checked: false },
-  { id: "S08", text: "유튜브 프리미엄(개인) 한 달", answer: 14900, correct: true, conf: 80, step: 100, checked: false },
-  { id: "S09", text: "교촌치킨 허니콤보 1마리", answer: 23000, correct: true, conf: 90, step: 100, checked: false },
+  { id: "S07", text: "넷플릭스 스탠다드 요금제(광고 없음) 한 달", answer: 13500, correct: false, conf: 58, step: 100, checked: true },
+  { id: "S08", text: "유튜브 프리미엄 개인 요금제 한 달(웹·안드로이드 결제)", answer: 14900, correct: true, conf: 80, step: 100, checked: true },
+  { id: "S09", text: "교촌치킨 허니콤보 한 마리(배달비 제외)", answer: 23000, correct: true, conf: 90, step: 100, checked: true },
   // 십만 원대
-  { id: "S10", text: "애플 에어팟 프로(최신 모델)", answer: 369000, correct: true, conf: 74, step: 1000, checked: false },
-  { id: "S11", text: "닌텐도 스위치(최신 모델)", answer: 648000, correct: false, conf: 55, step: 1000, checked: false },
-  { id: "S12", text: "다이슨 에어랩(기본 모델)", answer: 699000, correct: true, conf: 72, step: 1000, checked: false },
-  { id: "S13", text: "플레이스테이션 5(디지털 에디션)", answer: 628000, correct: true, conf: 82, step: 1000, checked: false },
+  { id: "S10", text: "애플 에어팟 프로 3", answer: 369000, correct: true, conf: 74, step: 1000, checked: true },
+  { id: "S11", text: "닌텐도 스위치 OLED 모델", answer: 415000, correct: false, conf: 55, step: 1000, checked: true },
+  { id: "S12", text: "다이슨 에어랩 i.d. 멀티 스타일러(기본 구성)", answer: 699000, correct: true, conf: 72, step: 1000, checked: true },
+  { id: "S13", text: "플레이스테이션 5 슬림 디지털 에디션", answer: 558000, correct: true, conf: 82, step: 1000, checked: true },
   // 백만 원대 전후
-  { id: "S14", text: "애플 아이패드(기본 모델, 최저 용량)", answer: 529000, correct: true, conf: 70, step: 1000, checked: false },
-  { id: "S15", text: "애플 아이폰(최신 기본 모델, 최저 용량)", answer: 1290000, correct: false, conf: 72, step: 1000, checked: false },
-  { id: "S16", text: "애플 맥북 에어 13(기본 사양)", answer: 1590000, correct: true, conf: 88, step: 1000, checked: false },
+  { id: "S14", text: "애플 아이패드 에어 11인치(Wi-Fi, 128GB)", answer: 899000, correct: true, conf: 70, step: 1000, checked: true },
+  { id: "S15", text: "애플 아이폰 17 기본형(256GB)", answer: 1290000, correct: false, conf: 72, step: 1000, checked: true },
+  { id: "S16", text: "애플 맥북 에어 13인치 기본 모델(16GB, 256GB)", answer: 1590000, correct: true, conf: 88, step: 1000, checked: true },
 ];
 
 // 조작 점검 보기 (v1과 같다. 쉼표를 넣지 않는다 — CSV 칸이 깨진다)
