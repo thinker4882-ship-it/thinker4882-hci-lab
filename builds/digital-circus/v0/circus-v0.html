@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>디지털 서커스 v0</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@400;700&family=VT323&display=swap">
+<style>
+/* Layout: one-screen VHS player — low-res canvas stage on top, dialogue tape below. Single dark look by choice. */
+:root{
+  --bg:#07060a; --tape:#0f0d14; --fg:#e9e4d8; --dim:#8d8697;
+  --warm:#f2b25c; --ring:#e2524a; --seo:#9fd8c9; --sys:#7cff8a; --line:#2a2433;
+  --f-body:"Nanum Gothic Coding", ui-monospace, "Apple SD Gothic Neo", monospace;
+  --f-osd:"VT323", ui-monospace, monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);overflow:hidden;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#app{height:100%;max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding-block:10px;user-select:none;-webkit-user-select:none;box-sizing:border-box}
+#stage{position:relative;flex:0 0 auto;width:100%;height:min(54vh,118vw);background:#000;overflow:hidden;border-radius:3px}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+#noise{opacity:.12;mix-blend-mode:screen}
+#scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);}
+#vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.75) 100%)}
+#dark{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .08s linear;pointer-events:none}
+.osd{position:absolute;font-family:var(--f-osd);font-size:20px;letter-spacing:1px;color:#fff;text-shadow:2px 0 rgba(255,0,60,.6),-2px 0 rgba(0,200,255,.5);pointer-events:none}
+#osdL{left:10px;top:6px} #osdR{right:10px;top:6px} #osdB{left:10px;bottom:6px;color:var(--sys)}
+#stage.shake{animation:shake .35s steps(6) 1}
+#stage.rgb canvas#scene{filter:contrast(1.3) saturate(1.6) hue-rotate(25deg)}
+@keyframes shake{0%{transform:translate(0,0)}20%{transform:translate(-6px,2px)}40%{transform:translate(5px,-3px)}60%{transform:translate(-3px,4px)}80%{transform:translate(4px,0)}100%{transform:translate(0,0)}}
+#tape{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:10px}
+#box{position:relative;flex:1 1 auto;min-height:96px;background:var(--tape);border:1px solid var(--line);border-radius:3px;padding:14px 14px 26px;overflow-y:auto;cursor:pointer}
+#who{font-family:var(--f-osd);font-size:19px;letter-spacing:1.5px;color:var(--dim);margin-bottom:4px;min-height:19px}
+#txt{font-size:16px;line-height:1.7;white-space:pre-wrap;word-break:keep-all}
+#txt.seo{color:var(--seo)} #txt.ring{color:var(--ring);font-weight:700} #txt.msg{color:var(--fg)} #txt.sys{color:var(--sys);font-family:var(--f-osd);font-size:22px}
+.bubble{display:inline-block;background:#fee500;color:#191600;border-radius:4px 14px 14px 14px;padding:8px 12px;font-size:15px}
+#more{position:absolute;right:12px;bottom:6px;font-family:var(--f-osd);font-size:18px;color:var(--dim);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+#choices{display:flex;flex-direction:column;gap:8px}
+[hidden]{display:none!important}
+#choices > button,.btn{font:inherit;font-size:15px;text-align:left;color:var(--fg);background:#16131c;border:1px solid #3a3346;border-radius:3px;padding:12px 14px;cursor:pointer}
+#choices > button:hover,#choices > button:focus-visible,.btn:hover,.btn:focus-visible{border-color:var(--warm);outline:none;color:#fff}
+#choices > button::before{content:"▶ ";color:var(--warm);font-family:var(--f-osd)}
+#timer{height:3px;background:var(--ring);transform-origin:left;}
+/* title & end */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center;background:rgba(7,6,10,.82);z-index:5}
+.ticket{border:2px dashed var(--warm);padding:16px 22px;color:var(--warm);font-family:var(--f-osd);letter-spacing:2px;transform:rotate(-2deg)}
+.ticket b{display:block;font-size:40px;line-height:1}
+.ticket span{font-size:18px}
+.note{color:var(--dim);font-size:13px;line-height:1.6}
+.btn.primary{background:var(--warm);color:#1a1205;border-color:var(--warm);font-weight:700;text-align:center}
+#endpanel{display:flex;flex-direction:column;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;padding:7px 10px;border-radius:14px;border:1px solid #3a3346;background:#16131c;color:var(--fg);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ring);border-color:var(--ring);color:#fff}
+#copyout{font-size:13px;color:var(--dim);white-space:pre-wrap;background:#0b0a0f;border:1px solid var(--line);padding:10px;border-radius:3px;user-select:text;-webkit-user-select:text}
+@media (prefers-reduced-motion:reduce){#stage.shake{animation:none}#more{animation:none}}
+</style>
+</head><body>
+<div id="app">
+  <div id="stage">
+    <canvas id="scene" width="120" height="150"></canvas>
+    <canvas id="noise" width="120" height="150"></canvas>
+    <div id="dark"></div>
+    <div id="scan"></div><div id="vig"></div>
+    <div class="osd" id="osdL">▶ PLAY</div>
+    <div class="osd" id="osdR">SP 00:00:00</div>
+    <div class="osd" id="osdB"></div>
+    <div class="screen" id="title">
+      <div class="ticket"><span>ADMIT ONE · 1매</span><b>CIRCUS</b><span>오늘 밤 8시 · 자유석</span></div>
+      <div class="note">이어폰 권장 · 약 5분<br>화면이나 글 상자를 누르면 다음으로 넘어가</div>
+      <button class="btn primary" id="startBtn">입장하기 (소리 켜짐)</button>
+    </div>
+  </div>
+  <div id="tape">
+    <div id="box" tabindex="0" aria-live="polite"><div id="who"></div><div id="txt"></div><div id="more" hidden>▼</div></div>
+    <div id="timer" hidden></div>
+    <div id="choices"></div>
+  </div>
+</div>
+
+<script>
+/* ================= AUDIO ================= */
+const A = {ctx:null, master:null, music:null, hum:null, hb:null, pad:null, detune:0, rate:1, noiseBuf:null, clapBuf:null};
+function audioInit(){
+  const C = new (window.AudioContext||window.webkitAudioContext)();
+  A.ctx=C; A.master=C.createGain(); A.master.gain.value=.8; A.master.connect(C.destination);
+  const n=C.createBuffer(1,C.sampleRate*2,C.sampleRate), d=n.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  A.noiseBuf=n;
+  // applause buffer generated ONCE with a fixed seed -> every replay is identical
+  let s=7; const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647};
+  const len=C.sampleRate*2.4, cb=C.createBuffer(1,len,C.sampleRate), cd=cb.getChannelData(0);
+  for(let k=0;k<420;k++){const at=Math.floor(Math.pow(rnd(),.7)*len*.85), dur=Math.floor(C.sampleRate*(.006+rnd()*.01)), amp=.25+rnd()*.6;
+    for(let i=0;i<dur&&at+i<len;i++) cd[at+i]+= (rnd()*2-1)*amp*Math.exp(-i/(dur*.3));}
+  for(let i=0;i<len;i++) cd[i]*=Math.min(1,i/(C.sampleRate*.15))*Math.min(1,(len-i)/(C.sampleRate*.9));
+  A.clapBuf=cb;
+}
+function env(g,t,a,peak,dec){g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+a);g.gain.exponentialRampToValueAtTime(0.0001,t+a+dec);}
+function tone(freq,t,dur,type='square',vol=.06,dest=A.master,det=0){
+  const C=A.ctx,o=C.createOscillator(),g=C.createGain(),f=C.createBiquadFilter();
+  o.type=type;o.frequency.value=freq;o.detune.value=det;f.type='lowpass';f.frequency.value=2200;
+  o.connect(f);f.connect(g);g.connect(dest);env(g,t,.01,vol,dur);o.start(t);o.stop(t+dur+.05);return o;
+}
+// waltz melody (calliope): [semitone from C5 or null, beats]
+const MEL=[[7,1],[4,1],[4,1],[5,1],[2,1],[2,1],[0,1],[2,1],[4,1],[5,1],[7,1],[7,1],[7,1],[4,1],[4,1],[5,1],[2,1],[2,1],[0,1],[4,1],[7,1],[0,3]];
+const BASS=[0,7,5,7];
+function musicStart(){
+  musicStop(); const C=A.ctx; let i=0,bar=0,next=C.currentTime+.1;
+  A.music={timer:setInterval(()=>{
+    while(next<C.currentTime+.25){
+      const beat=60/150/A.rate, [st,b]=MEL[i%MEL.length];
+      if(st!==null){ tone(523.25*Math.pow(2,st/12),next,beat*b*.9,'square',.035,A.master,A.detune);
+                     tone(523.25*Math.pow(2,(st+12)/12),next,beat*b*.6,'triangle',.02,A.master,A.detune*1.7); }
+      if(i%3===0){ tone(130.8*Math.pow(2,BASS[bar%4]/12),next,beat*.8,'triangle',.07,A.master,A.detune*.5); bar++; }
+      else tone(261.6*Math.pow(2,(BASS[bar%4]+(i%3===1?4:7))/12),next,beat*.4,'square',.018,A.master,A.detune);
+      next+=beat*b; i++;
+    }},50)};
+}
+function musicStop(){ if(A.music){clearInterval(A.music.timer);A.music=null;} }
+function noise(dur,{type='bandpass',freq=1000,q=1,vol=.3,at=0}={}){
+  const C=A.ctx,s=C.createBufferSource(),f=C.createBiquadFilter(),g=C.createGain(),t=C.currentTime+at;
+  s.buffer=A.noiseBuf;s.loop=true;f.type=type;f.frequency.value=freq;f.Q.value=q;
+  s.connect(f);f.connect(g);g.connect(A.master);env(g,t,.02,vol,dur);s.start(t);s.stop(t+dur+.1);return {s,f,g};
+}
+const FX={
+  applause(){const C=A.ctx,s=C.createBufferSource(),f=C.createBiquadFilter(),g=C.createGain();s.buffer=A.clapBuf;f.type='bandpass';f.frequency.value=2200;f.Q.value=.7;g.gain.value=.9;s.connect(f);f.connect(g);g.connect(A.master);s.start();},
+  glitch(){const C=A.ctx,t=C.currentTime;for(let k=0;k<9;k++){tone(80+Math.random()*1600,t+k*.04,.03,'square',.05)}noise(.35,{type:'highpass',freq:3000,vol:.25});shake();},
+  stinger(){const C=A.ctx,t=C.currentTime;[0,1,6,11,13].forEach(s=>tone(110*Math.pow(2,s/12),t,1.6,'sawtooth',.06));noise(.8,{type:'lowpass',freq:900,vol:.5});shake();},
+  shh(){noise(.5,{freq:2600,q:2,vol:.18});noise(.5,{freq:2400,q:2,vol:.2,at:1.1});},
+  rumble(){noise(2.4,{type:'lowpass',freq:160,vol:.9});noise(1.2,{type:'bandpass',freq:500,vol:.25,at:.3});},
+  click(){tone(1200,A.ctx.currentTime,.02,'square',.03)},
+  thud(){const C=A.ctx,o=C.createOscillator(),g=C.createGain();o.frequency.setValueAtTime(140,C.currentTime);o.frequency.exponentialRampToValueAtTime(40,C.currentTime+.2);o.connect(g);g.connect(A.master);env(g,C.currentTime,.005,.6,.25);o.start();o.stop(C.currentTime+.4)},
+  door(){noise(.6,{type:'lowpass',freq:400,vol:.5});tone(70,A.ctx.currentTime,.4,'sine',.3)},
+  buzz(){const t=A.ctx.currentTime;[0,.25].forEach(d=>tone(180,t+d,.15,'square',.04))},
+  alarm(){const t=A.ctx.currentTime;for(let k=0;k<4;k++)tone(k%2?988:1319,t+k*.18,.12,'sine',.05)},
+};
+function humStart(){humStop();const C=A.ctx,o=C.createOscillator(),o2=C.createOscillator(),f=C.createBiquadFilter(),g=C.createGain();o.type='sawtooth';o.frequency.value=55;o2.type='sawtooth';o2.frequency.value=55.7;f.type='lowpass';f.frequency.value=180;g.gain.value=.0001;o.connect(f);o2.connect(f);f.connect(g);g.connect(A.master);o.start();o2.start();g.gain.exponentialRampToValueAtTime(.12,C.currentTime+1);A.hum={o,o2,g};}
+function humStop(){if(A.hum){const C=A.ctx;A.hum.g.gain.exponentialRampToValueAtTime(.0001,C.currentTime+.3);const h=A.hum;setTimeout(()=>{h.o.stop();h.o2.stop()},400);A.hum=null;}}
+function heartStart(bpm){heartStop();A.hb=setInterval(()=>{FX.thud();setTimeout(FX.thud,180)},60000/bpm);}
+function heartStop(){if(A.hb){clearInterval(A.hb);A.hb=null;}}
+function padStart(odd){padStop();const C=A.ctx,g=C.createGain();g.gain.value=.0001;g.connect(A.master);
+  const os=[261.6,329.6,392,523.3].map(f=>{const o=C.createOscillator();o.type='sine';o.frequency.value=f;o.connect(g);o.start();return o;});
+  g.gain.exponentialRampToValueAtTime(.06,C.currentTime+2);
+  const iv=odd?setInterval(()=>tone(466.2,A.ctx.currentTime,2.2,'sine',.035,A.master,-38),4200):null;
+  A.pad={g,os,iv};}
+function padStop(){if(A.pad){const C=A.ctx;A.pad.g.gain.exponentialRampToValueAtTime(.0001,C.currentTime+.5);const p=A.pad;setTimeout(()=>p.os.forEach(o=>o.stop()),600);if(p.iv)clearInterval(p.iv);A.pad=null;}}
+function allStop(){musicStop();humStop();heartStop();padStop();}
+// no-op safely when audio could not start
+for(const fn of ['musicStart','humStart','heartStart','padStart']){const orig=window[fn];window[fn]=(...a)=>{if(A.ctx)orig(...a)};}
+for(const k of Object.keys(FX)){const orig=FX[k];FX[k]=(...a)=>{if(A.ctx)orig(...a)};}
+
+/* ================= VISUALS (120x150 low-res) ================= */
+const cv=document.getElementById('scene'),g=cv.getContext('2d'),W=120,H=150;
+const nz=document.getElementById('noise'),nzg=nz.getContext('2d');
+const stage=document.getElementById('stage'),darkEl=document.getElementById('dark');
+const S={scene:'black',act:0,sync:false,fig:0,seoGone:false,zoom:1,glitchy:0,t0:performance.now()};
+function R(x,y,w,h,c){g.fillStyle=c;g.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));}
+function poly(pts,c){g.fillStyle=c;g.beginPath();g.moveTo(pts[0],pts[1]);for(let i=2;i<pts.length;i+=2)g.lineTo(pts[i],pts[i+1]);g.closePath();g.fill();}
+function audience(t,y,color,sync,seed){
+  for(let row=0;row<3;row++){for(let x=-4+row*3;x<W+6;x+=9){
+    const ph=sync?0:(x*1.7+row*5+seed);const bob=Math.round(Math.sin(t*3+ph)*(sync?1.2:0.6));
+    const yy=y+row*9+bob; R(x,yy,7,12,color); R(x+1,yy-5,5,5,color);}}
+}
+const SCENES={
+  black(){R(0,0,W,H,'#000')},
+  tent(t){
+    R(0,0,W,H,'#1a0707');
+    const cx=60,top=-6;for(let i=0;i<14;i++){const a=i/14*W*2-W/2,b=(i+1)/14*W*2-W/2;poly([cx,top,a,92,b,92],i%2?'#7a1b1b':'#c9b48e');}
+    R(0,0,W,H,'rgba(20,5,5,.35)');
+    for(let i=0;i<16;i++){const x=i*8+2,y=20+Math.abs(Math.sin(i*.7))*14;const on=(Math.sin(t*2+i)>-.6);R(x,y,2,2,on?'#ffd27a':'#6b4a22');}
+    // ring + spotlight
+    poly([52,0,68,0,86,100,34,100],'rgba(255,240,200,.10)');
+    g.fillStyle='#b08143';g.beginPath();g.ellipse(60,100,40,10,0,0,7);g.fill();g.fillStyle='#e7c27c';g.beginPath();g.ellipse(60,99,28,6,0,0,7);g.fill();
+    if(S.act===1){R(58,84,4,10,'#2a2a6a');for(let k=0;k<5;k++){const a=t*4+k*1.256;R(60+Math.cos(a)*9,70-Math.abs(Math.sin(a))*14,2,2,['#ff5','#5ff','#f5f','#fff','#f85'][k]);}}
+    if(S.act===2){g.strokeStyle='#ddd';g.beginPath();g.moveTo(40,0);g.lineTo(60+Math.sin(t*1.6)*16,40);g.lineTo(80,0);g.stroke();R(57+Math.sin(t*1.6)*16,40,6,8,'#e44');}
+    audience(t,112,'#120808',S.sync,0);
+    R(96,128,10,14,'#d33');R(96,128,10,3,'#fff');R(98,124,2,4,'#fff6c9');R(101,123,2,5,'#fff6c9');
+  },
+  collapse(t){
+    R(0,0,W,H,'#000');
+    g.strokeStyle='rgba(60,255,120,.55)';g.lineWidth=1;const hz=70;
+    for(let i=-10;i<=10;i++){g.beginPath();g.moveTo(60+i*2,hz);g.lineTo(60+i*30,H);g.stroke();}
+    for(let k=0;k<9;k++){const y=hz+Math.pow(k/8,2)*(H-hz)+((t*8)%6)*(k/8);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();}
+    for(let k=0;k<12;k++){const x=(k*37)%W,y=(70-((t*6+k*23)%110));const s=4+(k%3)*3;g.save();g.translate(x,y);g.rotate(t*.5+k);R(-s/2,-s/2,s,s*1.4,k%2?'#7a1b1b':'#c9b48e');g.restore();}
+    audience(t,118,'#0a1a0e',true,0);
+  },
+  corridor(t){
+    R(0,0,W,H,'#0b0909');
+    const vx=60,vy=58;
+    for(let i=0;i<10;i++){const c=i%2?'#5a1414':'#8c8170';const x0=i*6,x1=(i+1)*6;
+      poly([x0,0,x1,0,vx-8+x1*.13,vy-10,vx-8+x0*.13,vy-10],c); }
+    for(let i=0;i<10;i++){const c=i%2?'#8c8170':'#5a1414';const x0=W-i*6,x1=W-(i+1)*6;
+      poly([x0,H,x1,H,vx+8-(W-x1)*.13,vy+10,vx+8-(W-x0)*.13,vy+10],'#1b1512');}
+    poly([0,0,0,H,vx-8,vy+10,vx-8,vy-10],'#4b1414');poly([W,0,W,H,vx+8,vy+10,vx+8,vy-10],'#6e6556');
+    for(let k=0;k<5;k++){poly([k*12,0,k*12+6,0,vx-8,vy-10+k*4,vx-8,vy-8+k*4],'rgba(0,0,0,.25)')}
+    poly([0,H,W,H,vx+8,vy+10,vx-8,vy+10],'#1b1512');
+    R(vx-8,vy-10,16,20,'#020202');
+    // props: crate+buddha left, mirror+talisman right
+    R(6,104,22,18,'#3b2a18');R(12,92,10,12,'#b8902e');R(14,86,6,7,S.glitchy?'#888':'#c9a23b');
+    R(92,70,18,34,'#2c3b3f');R(94,72,14,30,'#4d6066');R(98,78,6,12,'#e8cf3a');R(99,80,4,1,'#a11');R(99,84,4,1,'#a11');
+    // figure
+    if(S.fig>0){const sc=[0,.45,.9,1.8][S.fig];const fh=26*sc,fw=6*sc,fx=vx-fw/2,fy=vy+10-fh;
+      R(fx,fy+fh*.15,fw,fh*.85,'#000');R(fx-fw*.25,fy+fh*.05,fw*1.5,fh*.04,'#000');R(fx+fw*.15,fy-fh*.12,fw*.7,fh*.18,'#000');}
+    // bulb flicker
+    const on=Math.sin(t*23)>-.3||Math.sin(t*3.1)>.2;R(58,2,4,4,on?'#fff2b0':'#3a3320');if(on){g.fillStyle='rgba(255,240,180,.07)';g.fillRect(0,0,W,H);}
+  },
+  monitors(t){
+    R(0,0,W,H,'#060807');
+    for(let r=0;r<3;r++)for(let c=0;c<3;c++){const x=6+c*37,y=8+r*44,w=33,h=36;R(x-2,y-2,w+4,h+4,'#1b1f1d');
+      const special=(r===1&&c===1);R(x,y,w,h,special?'#020403':'#16302a');
+      if(!special){for(let k=0;k<3;k++)for(let j=0;j<6;j++){R(x+2+j*5,y+14+k*7,3,5,'#071510');R(x+2.5+j*5,y+12+k*7,2,2,'#071510');}}
+      else{g.fillStyle='#7cff8a';g.font='7px monospace';g.fillText('312',x+9,y+14);g.fillText('/ 1',x+11,y+24);if(Math.sin(t*5)>0)R(x+2,y+30,4,2,'#7cff8a');}
+      R(x,y+((t*30+r*7+c*11)%h),w,1,'rgba(150,255,190,.15)');}
+  },
+  exit(t){
+    R(0,0,W,H,'#081210');poly([30,40,90,40,96,150,24,150],'#0c1a17');
+    R(42,52,36,92,'#0f2622');
+    const gap=4+Math.sin(t*1.5);g.fillStyle='rgba(255,230,160,.9)';g.fillRect(59-gap/2,54,gap,88);
+    g.fillStyle='rgba(255,220,140,.12)';g.beginPath();g.moveTo(59,54);g.lineTo(20,150);g.lineTo(100,150);g.lineTo(61,54);g.fill();
+    R(46,30,28,10,'#0a3b1b');g.fillStyle=Math.sin(t*9)>-.9?'#55ff7a':'#1a4a26';g.font='bold 8px monospace';g.fillText('EXIT',50,38);
+  },
+  swirl(t){
+    R(0,0,W,H,'#081210');R(42,52,36,92,'#0f2622');g.fillStyle='rgba(255,230,160,.5)';g.fillRect(57,54,4,88);
+    g.fillStyle='#1d1a22';g.beginPath();g.ellipse(60,62,22,26,0,0,7);g.fill();R(26,92,68,60,'#1d1a22');
+    g.save();g.beginPath();g.ellipse(60,66,15,19,0,0,7);g.clip();R(40,44,40,44,'#000');
+    for(let k=0;k<160;k++){const a=k*.25-t*5,rr=k*.13;g.fillStyle=k%2?'#e9e4d8':'#2a2433';g.fillRect(60+Math.cos(a)*rr,66+Math.sin(a)*rr*1.25,2,2);}
+    g.restore();
+  },
+  room(t){
+    R(0,0,W,H,'#d8c9b0');R(0,0,W,18,'#c9b89c');
+    const off=(S.glitchy&&Math.sin(t*7)>.6)?2:1;R(0,17,W,1,'#9a8a70');R(78,17-off,42,1,'#6b5d48');
+    R(70,30,40,40,'#a8d8f0');R(88,30,2,40,'#d8c9b0');R(70,49,40,2,'#d8c9b0');g.fillStyle='rgba(255,250,220,.25)';g.beginPath();g.moveTo(70,30);g.lineTo(110,30);g.lineTo(80,150);g.lineTo(20,150);g.fill();
+    R(4,96,70,30,'#e9e2d4');R(4,90,70,8,'#b9c6d8');R(6,88,18,8,'#f4f1ea');R(4,126,70,24,'#8a6d4c');
+    R(84,98,34,6,'#7a5a3a');R(86,104,3,46,'#5c4229');R(113,104,3,46,'#5c4229');
+    R(96,92,12,6,'#f2b25c');R(99,93,6,1,'#7a3a0a');
+    R(88,92,6,6,'#222');if(S.phone)R(89,93,4,4,'#9fe');
+  },
+  roomDark(t){
+    R(0,0,W,H,'#0d0c12');R(70,30,40,40,'#1b2433');R(4,96,70,30,'#1a1822');R(4,126,70,24,'#120f0c');
+    const off=Math.round(Math.sin(t*.8)*2+2);R(0,17,W,1,'#2a2733');R(78,17-off,42,1,'#4a4560');
+    R(96,92,12,6,'#5a3f1e');
+  },
+  city(t){
+    const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#05061a');gr.addColorStop(1,'#1a1240');g.fillStyle=gr;g.fillRect(0,0,W,H);
+    for(let k=0;k<40;k++){const x=(k*53+t*2)%W,y=(k*29)%70;R(x,y,1,1,k%5?'#aab':'#fff');}
+    g.fillStyle='#e9e4d8';g.beginPath();g.arc(92,24,7,0,7);g.fill();
+    for(let layer=0;layer<3;layer++){const sp=[6,12,22][layer],base=[96,112,130][layer],col=['#140f2c','#0d0a1f','#07051a'][layer];
+      for(let k=0;k<14;k++){const w=10+((k*7+layer*3)%9),x=((k*17-t*sp)%(W+40)+W+40)%(W+40)-20,h=18+((k*13+layer*11)%30);R(x,base-h,w,H,col);
+        for(let j=0;j<4;j++)if((k+j+layer)%3===0)R(x+2+j*2,base-h+4+j*5,1,1,'#ffd27a');}}
+    R(56,70+Math.sin(t*2)*3,8,4,'#e9e4d8');R(54,72+Math.sin(t*2)*3,3,2,'#e9e4d8');
+  },
+};
+function draw(now){
+  const t=(now-S.t0)/1000;
+  g.save();if(S.zoom!==1){g.translate(60,58);g.scale(S.zoom,S.zoom);g.translate(-60,-58);}
+  (SCENES[S.scene]||SCENES.black)(t);g.restore();
+  const id=nzg.createImageData(W,H);for(let i=0;i<id.data.length;i+=4){const v=Math.random()*255;id.data[i]=id.data[i+1]=id.data[i+2]=v;id.data[i+3]=255;}
+  nzg.putImageData(id,0,0);
+  if(S.glitchy&&Math.random()<.05){const y=Math.random()*H|0,h=2+Math.random()*8|0;const sl=g.getImageData(0,y,W,h);g.putImageData(sl,(Math.random()*10-5)|0,y);}
+  const el=Math.floor((now-S.t0)/1000);document.getElementById('osdR').textContent='SP '+[0,Math.floor(el/60),el%60].map(n=>String(n).padStart(2,'0')).join(':');
+  requestAnimationFrame(draw);
+}
+function shake(){stage.classList.remove('shake');void stage.offsetWidth;stage.classList.add('shake');stage.classList.add('rgb');setTimeout(()=>stage.classList.remove('rgb'),300);}
+function setDark(v){darkEl.style.opacity=v;}
+function osd(s){document.getElementById('osdB').textContent=s||'';}
+
+/* ================= STORY ================= */
+const N={
+ n1:{scene:'tent',enter(){S.act=0;S.sync=false;musicStart();},lines:[
+  {w:'narr',t:'주말 밤. 서아가 보내 준 표 두 장으로 들어온 천막 안은 생각보다 따뜻했다.'},
+  {w:'seo',t:'봐, 오길 잘했지? 너 요즘 너무 집에만 있었어.'},
+  {w:'seo',t:'팝콘 반 줘. 너 저번에 회전목마 타고 멀미한 거, 나 아직 기억하거든.'}],
+  choices:[{l:'팝콘을 건넨다',to:'n2',set:'popcorn'},{l:'"그 얘기 좀 그만해."',to:'n2'}]},
+ n2:{scene:'tent',enter(){S.act=1;},lines:[
+  {w:'seo',t:()=>F.popcorn?'고마워. …역시 버터 맛이 최고야.':'알았어, 알았어. 대신 팝콘은 내 거.'},
+  {w:'ring',t:'신사 숙녀 여러분! 다음 무대를 위해— 박수를!',fx:'applause'},
+  {w:'narr',t:'저글러가 공 다섯 개를 띄운다. 관객들이 한꺼번에 웃는다.'},
+  {w:'seo',t:'다음이 공중그네래. 나 저거 보려고 온 거야.'}],
+  choices:[{l:'박수를 친다',to:'n3'}]},
+ n3:{scene:'tent',enter(){S.act=2;},lines:[
+  {w:'ring',t:'신사 숙녀 여러분! 다음 무대를 위해— 박수를!',fx:'applause'},
+  {w:'narr',t:'공중그네가 크게 원을 그린다. 박수가 터진다. 그리고'},
+  {w:'ring',t:'신사 숙녀 여러분! 다음 무대를 위해— 박수를!',fx:'applause',do(){S.sync=true;A.detune=-30;}},
+  {w:'ring',t:'신사 숙녀 여러분! 다음 무대를 위해— 박수를!',fx:'applause',do(){A.detune=-70;A.rate=.85;S.glitchy=1;osd('TRACKING');}},
+  {w:'narr',t:'똑같은 억양. 똑같은 박수. 관객들이 정확히 같은 순간에 고개를 끄덕인다.'},
+  {w:'seo',t:'…방금, 똑같이 말하지 않았어?'}],
+  choices:[{l:'옆자리 관객을 본다',to:'n4a'},{l:'서아의 손을 잡는다',to:'n4b'}]},
+ n4a:{scene:'tent',lines:[
+  {w:'narr',t:'옆자리 남자가 웃고 있다. 웃음이 끝나지 않는다.'},
+  {w:'narr',t:'입꼬리가 같은 높이에서 멈춰 있다. 눈은 무대가 아니라, 정면의 아무 데도 아닌 곳을 본다.'}],next:'collapse'},
+ n4b:{scene:'tent',lines:[
+  {w:'seo',t:'손 차갑다, 너.'},
+  {w:'narr',t:'서아가 웃는다. 그 순간 음악이 반 박자 늦게 따라온다.'}],next:'collapse'},
+ collapse:{scene:'tent',lines:[
+  {w:'narr',t:'천장에서 무언가 찢어지는 소리.',fx:'rumble',do(){musicStop();}},
+  {w:'narr',t:'아니, 찢어지는 게 아니다. 벗겨진다.',fx:'glitch',do(){S.scene='collapse';osd('NO SIGNAL');}},
+  {w:'narr',t:'천막이 포장지처럼 떨어져 나간 자리에 아무것도 없다. 초록 격자. 끝이 없는 바닥.'},
+  {w:'narr',t:'관객들은 그대로 앉아 있다. 그대로, 같은 박자로, 웃고 있다.'},
+  {w:'seo',t:'이쪽! 뒤에 문 있어!'}],
+  choices:[{l:'서아를 따라 뛴다',to:'hub'}]},
+ hub:{scene:'corridor',enter(){if(!F.hubIn){F.hubIn=1;humStart();osd('');}},lines:()=>F.hubShown?[{w:'narr',t:'복도는 여전히 조용하다. 전구가 깜빡인다.'}]:(F.hubShown=1,[
+  {w:'narr',t:'무대 뒤 복도. 문을 닫자 객석 소리가 칼로 자른 듯 끊긴다.'},
+  {w:'seo',t:'숨 좀 고르자. …여기 뭐야, 다 이상해.'},
+  {w:'narr',t:'공연 소품 사이로, 여기 있으면 안 될 것들이 보인다.'}]),
+  choices:()=>[
+   !F.buddha&&{l:'상자 위의 작은 불상',to:'buddha'},
+   !F.ticket&&{l:'바닥에 떨어진 표',to:'ticket'},
+   !F.mirror&&{l:'부적이 붙은 거울',to:'mirror'},
+   {l:'복도 끝으로 간다',to:'dark'}].filter(Boolean)},
+ buddha:{scene:'corridor',enter(){F.buddha=1;},lines:[
+  {w:'narr',t:'금칠이 벗겨진 작은 불상. 서커스 소품 사이에 있을 이유가 없다.'},
+  {w:'narr',t:'가까이서 보니 얼굴만 텍스처가 없다. 매끈한 회색 다각형.',do(){S.glitchy=1;}},
+  {w:'seo',t:'만지지 마. 기분 나빠.'}],next:'hub'},
+ ticket:{scene:'corridor',enter(){F.ticket=1;},lines:[
+  {w:'narr',t:'입장권이다. 내 이름이 적혀 있다.'},
+  {w:'narr',t:'그 아래 작은 글씨.'},
+  {w:'sys',t:'입장 4,118회째'},
+  {w:'seo',t:'인쇄 오류겠지. …그치?'}],next:'hub'},
+ mirror:{scene:'corridor',enter(){F.mirror=1;},lines:[
+  {w:'narr',t:'금 간 거울에 노란 부적이 붙어 있다. 붉은 글씨는 읽을 수 없다.'},
+  {w:'narr',t:'부적 너머로 내 얼굴이 보인다. 내 뒤에는 아무도 없다.'},
+  {w:'narr',t:'돌아본다.',wait:900},
+  {w:'narr',t:'서아가 없다.',fx:'thud',wait:2200},
+  {w:'narr',t:'발소리. 복도 반대편에서 서아가 걸어온다.'},
+  {w:'seo',t:'야, 어디 갔었어? 나 계속 여기 있었는데.'}],next:'hub'},
+ dark:{scene:'corridor',enter(){S.fig=0;},lines:[
+  {w:'narr',t:'복도 끝에 다다르자 불이 꺼진다.',do(){setDark(1);FX.click();}},
+  {w:'narr',t:'…',wait:()=>1600+Math.random()*2600},
+  {w:'narr',t:'슥.  슥.',fx:'shh',wait:2400},
+  {w:'narr',t:'무언가 바닥을 끄는 소리.'},
+  {w:'narr',t:'불이 들어온다.',do(){setDark(0);S.fig=1;FX.click();}},
+  {w:'narr',t:'복도 끝에 키 큰 형체가 서 있다. 높은 모자. 얼굴이 있어야 할 자리가 어둡다.'},
+  {w:'seo',t:'(속삭이며) 단장이야. 움직이지 마.'},
+  {w:'narr',t:'불이 꺼진다.',do(){setDark(1);FX.click();},wait:()=>900+Math.random()*1800},
+  {w:'narr',t:'다시 켜졌을 때, 형체는 아까보다 가깝다.',fx:'stinger',do(){setDark(0);S.fig=2;heartStart(80);}}],
+  choices:[{l:'의상 더미 뒤에 숨는다',to:'hide'},{l:'반대쪽으로 달린다',to:'chase1'}],timer:{ms:4500,to:'chase1'}},
+ hide:{scene:'corridor',lines:[
+  {w:'narr',t:'의상 더미 뒤에 웅크린다. 서아가 내 입을 손으로 막는다.',do(){setDark(.75);}},
+  {w:'narr',t:'바닥 끄는 소리가 바로 앞에서 멈춘다.',fx:'shh',wait:2600},
+  {w:'ring',t:'(아주 가까이서) 다음 무대를 위해—',wait:()=>1400+Math.random()*1600},
+  {w:'seo',t:'뛰어!',fx:'stinger',do(){setDark(0);S.fig=3;heartStart(120);}}],next:'chase1'},
+ chase1:{scene:'corridor',enter(){S.fig=3;S.zoom=1.15;heartStart(130);},lines:[
+  {w:'narr',t:'뛴다. 뒤에서 바닥 끄는 소리가 빨라진다.',fx:'shh'},
+  {w:'narr',t:'갈림길.'}],
+  choices:[{l:'왼쪽',to:'chase2'},{l:'오른쪽',to:'chase2'}],timer:{ms:2600,to:'chase2',late:1}},
+ chase2:{scene:'corridor',enter(){S.zoom=1.35;S.glitchy=1;},lines:()=>[
+  F.late?{w:'narr',t:'머뭇거린 사이, 차가운 손끝이 뒷목을 스친다.',fx:'glitch'}:{w:'narr',t:'모퉁이를 돈다. 소리는 아직 바로 뒤에 있다.'},
+  {w:'seo',t:'저기 문! "관계자 외 출입금지"!'}],
+  choices:[{l:'문을 민다',to:'control'},{l:'문을 당긴다',to:'pull'}],timer:{ms:2400,to:'pull',late:1}},
+ pull:{scene:'corridor',lines:[
+  {w:'narr',t:'안 열린다.',fx:'thud'},
+  {w:'ring',t:'신사 숙녀 여러분—',fx:'glitch'},
+  {w:'narr',t:'서아가 몸으로 문을 밀어젖힌다.'}],next:'control'},
+ control:{scene:'monitors',enter(){heartStop();humStop();S.zoom=1;S.fig=0;FX.door();osd('');F.late=0;},lines:[
+  {w:'narr',t:'문이 닫힌다. 조용하다. 벽 한가득 모니터.'},
+  {w:'narr',t:'화면마다 객석이 보인다. 웃고 있는 관객들. 가운데 화면에만 글자가 떠 있다.'},
+  {w:'sys',t:'관객 312 / 접속자 1'},
+  {w:'narr',t:'접속자 1. 그 화면 구석, 객석 맨 앞줄에 누군가 고개를 숙인 채 꼼짝 않고 앉아 있다.'},
+  {w:'narr',t:'내 옷을 입고.'},
+  {w:'seo',t:'보지 마. 출구 표시 저기 있어. 빨리.'}],
+  choices:[{l:'서아와 출구로 간다',to:'exit'}]},
+ exit:{scene:'exit',lines:[
+  {w:'narr',t:'초록색 EXIT. 문틈으로 아침 햇빛이 새어 나온다. 진짜 햇빛 같다.'},
+  {w:'seo',t:'먼저 가. 내가 문 잡고 있을게.'},
+  {w:'seo',t:'…같이 와 줘서 고마워. 진짜로.'}],
+  choices:[{l:'문을 연다',to:'turn',set:'opened'},{l:'서아를 돌아본다',to:'turn'}]},
+ turn:{scene:'exit',lines:()=>[
+  F.opened?{w:'narr',t:'문손잡이를 돌리다가, 이상하게 마지막으로 서아를 한 번 보고 싶어진다.'}:{w:'narr',t:'고맙다고 말하려고 돌아본다.'},
+  {w:'narr',t:'…',wait:1100,do(){S.scene='swirl';FX.glitch();osd('ERR 0x0F');}},
+  {w:'narr',t:'서아의 얼굴이 없다. 얼굴이 있던 자리에서 텍스처가 소용돌이친다.',fx:'stinger'},
+  {w:'seo',t:'신사 숙녀 여러분. 다음 무대를 위해—',do(){document.getElementById('txt').classList.add('ring');}},
+  {w:'narr',t:'서아의 목소리. 단장의 억양.'},
+  {w:'narr',t:'표 두 장을 보낸 것도, 손을 잡아 끈 것도. 처음부터.'},
+  {w:'narr',t:'뒤로 넘어진다. 문 너머로.',fx:'rumble',do(){setDark(1);}}],next:'room'},
+ room:{scene:'room',enter(){setDark(0);S.glitchy=0;osd('');A.detune=0;A.rate=1;S.phone=0;FX.alarm();},lines:[
+  {w:'narr',t:'내 방. 아침. 알람이 울린다.'},
+  {w:'narr',t:'이불 냄새. 창밖 소리. 땀에 젖은 베개.'},
+  {w:'narr',t:'휴대폰이 짧게 진동한다.',fx:'buzz',do(){S.phone=1;}},
+  {w:'msg',t:'서아\n어제 서커스 재밌었지? ㅋㅋ 다음 주에 또 가자'},
+  {w:'narr',t:'책상 위에 입장권이 놓여 있다.'},
+  {w:'sys',t:'입장 4,119회째'},
+  {w:'narr',t:'천장 모서리, 벽지 이음매가 한 줄 어긋나 있다. 아주 조금.',do(){S.glitchy=1;}}],
+  choices:[{l:'창문을 연다',to:'endB'},{l:'다시 눕는다',to:'endA'}]},
+ endA:{scene:'roomDark',enter(){F.seenA=1;S.glitchy=1;A.rate=.55;A.detune=-20;musicStart();},lines:[
+  {w:'narr',t:'커튼을 친다. 눈을 감는다.'},
+  {w:'narr',t:'아주 멀리서 오르간 소리가 들린다. 다음 무대가 시작되려나 보다.'},
+  {w:'narr',t:'이상하게 무섭지 않다.'},
+  {w:'narr',t:'여기가 어디든. 나가지 않아도, 괜찮을지도.'}],end:'A · 다시 눕기'},
+ endB:{scene:'city',enter(){F.seenB=1;S.glitchy=0;padStart(true);},lines:[
+  {w:'narr',t:'창문을 열자, 아침이 아니라 밤의 도시가 펼쳐진다.'},
+  {w:'narr',t:'발이 바닥에서 떨어진다.'},
+  {w:'narr',t:'날고 있다. 말도 안 되는데, 하나도 이상하지 않다. 이렇게 넓은 세상을 마음대로 지을 수 있다면—'},
+  {w:'narr',t:'바람 소리 사이로 아주 작게, 박수 소리가 들린다.',fx:'applause'}],end:'B · 창문 열기'},
+};
+let F={};
+
+/* ================= ENGINE ================= */
+const box=document.getElementById('box'),who=document.getElementById('who'),txt=document.getElementById('txt'),more=document.getElementById('more'),chs=document.getElementById('choices'),timerEl=document.getElementById('timer');
+const WHO={narr:'',seo:'서아',ring:'단장',msg:'메시지',sys:''};
+let cur=null,lines=[],li=0,typing=null,full='',autoT=null,choiceT=null,busy=false;
+const val=v=>typeof v==='function'?v():v;
+function go(id){
+  clearTimeout(autoT);autoT=null;clearTimeout(choiceT);timerEl.hidden=true;chs.innerHTML='';
+  cur=N[id];cur.id=id;if(cur.scene)S.scene=cur.scene;if(cur.enter)cur.enter();
+  lines=val(cur.lines);li=0;show();
+}
+function show(){
+  const L=lines[li];more.hidden=true;txt.className='';
+  if(L.do)L.do(); if(L.fx&&A.ctx)FX[L.fx]();
+  who.textContent=WHO[L.w]||'';
+  const text=val(L.t);
+  if(L.w==='msg'){const [nm,body]=text.split('\n');who.textContent=nm+' · 메시지';txt.innerHTML='';const b=document.createElement('span');b.className='bubble';b.textContent=body;txt.appendChild(b);done(L);return;}
+  txt.classList.add(L.w);full=text;let i=0;txt.textContent='';
+  clearInterval(typing);typing=setInterval(()=>{i++;txt.textContent=full.slice(0,i);if(i>=full.length){clearInterval(typing);typing=null;done(L);}},L.w==='sys'?70:34);
+}
+function done(L){
+  if(L.wait){autoT=setTimeout(()=>{autoT=null;next();},val(L.wait));return;}
+  if(li<lines.length-1){more.hidden=false;return;}
+  finish();
+}
+function next(){
+  if(typing){clearInterval(typing);typing=null;txt.textContent=full;done(lines[li]);return;}
+  if(lines[li]&&lines[li].wait&&autoT)return; // suspense: can't skip waits
+  if(li<lines.length-1){li++;show();}
+}
+function finish(){
+  if(cur.next){more.hidden=false;cur._fin=true;return;}
+  if(cur.end){endScreen(cur.end);return;}
+  const list=val(cur.choices)||[];chs.innerHTML='';
+  list.forEach(c=>{const b=document.createElement('button');b.textContent=c.l;b.onclick=()=>{if(A.ctx)FX.click();if(c.set)F[c.set]=1;go(c.to)};chs.appendChild(b);});
+  if(cur.timer){const tm=cur.timer;timerEl.hidden=false;timerEl.style.transition='none';timerEl.style.transform='scaleX(1)';void timerEl.offsetWidth;timerEl.style.transition=`transform ${tm.ms}ms linear`;timerEl.style.transform='scaleX(0)';
+    choiceT=setTimeout(()=>{if(tm.late)F.late=1;go(tm.to)},tm.ms);}
+}
+function advance(){
+  if(cur&&cur._fin&&!typing&&li>=lines.length-1){cur._fin=false;go(cur.next);return;}
+  next();
+}
+box.addEventListener('click',advance);
+stage.addEventListener('click',e=>{if(!document.getElementById('title').hidden||document.getElementById('endS'))return;advance();});
+box.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();advance();}});
+
+/* ================= TITLE / END ================= */
+document.getElementById('startBtn').onclick=()=>{
+  try{audioInit();}catch(e){}
+  document.getElementById('title').hidden=true;S.t0=performance.now();F={};A.detune=0;A.rate=1;go('n1');box.focus();
+};
+const MOMENTS=['반복되는 박수','천막이 벗겨질 때','불상·표·거울 흔적','서아가 사라졌다 나타날 때','불 꺼지고 슥슥 소리','단장이 가까워질 때','추격','모니터 속 "접속자 1"','서아의 얼굴','내 방 이음매·4,119회째','엔딩'];
+function endScreen(label){
+  const s=document.createElement('div');s.className='screen';s.id='endS';
+  s.innerHTML=`<div class="ticket"><span>ENDING</span><b style="font-size:30px">${label}</b><span>${F.seenA&&F.seenB?'엔딩 2개 다 봄':'다른 엔딩이 하나 더 있어'}</span></div>`;
+  stage.appendChild(s);
+  chs.innerHTML='';const p=document.createElement('div');p.id='endpanel';
+  p.innerHTML=`<div class="note" style="text-align:left">제일 소름 돋았던 순간을 골라 줘 (여러 개 가능). 가설이랑 비교할 거야.</div><div class="chips"></div><div id="copyout" hidden></div><div style="display:flex;gap:8px;flex-wrap:wrap"></div>`;
+  const chips=p.querySelector('.chips'),out=p.querySelector('#copyout'),row=p.lastElementChild;const picked=new Set();
+  MOMENTS.forEach(m=>{const c=document.createElement('button');c.className='chip';c.textContent=m;c.setAttribute('aria-pressed','false');c.onclick=()=>{picked.has(m)?picked.delete(m):picked.add(m);c.setAttribute('aria-pressed',picked.has(m));out.hidden=!picked.size;out.textContent=`v0 플레이 기록 · 엔딩 ${label}\n소름 돋은 순간: ${[...picked].join(', ')}`;};chips.appendChild(c);});
+  const mk=(t,fn,cls='btn')=>{const b=document.createElement('button');b.className=cls;b.textContent=t;b.onclick=fn;row.appendChild(b);};
+  mk('기록 복사',async()=>{try{await navigator.clipboard.writeText(out.textContent)}catch(e){const r=document.createRange();r.selectNodeContents(out);const sel=getSelection();sel.removeAllRanges();sel.addRange(r);}});
+  mk('다른 엔딩 보기',()=>{s.remove();allStop();go('room')});
+  mk('처음부터',()=>{s.remove();allStop();F={};S.glitchy=0;S.fig=0;S.zoom=1;setDark(0);osd('');A.detune=0;A.rate=1;go('n1')});
+  chs.appendChild(p);
+}
+requestAnimationFrame(draw);
+</script>
+</body></html>
