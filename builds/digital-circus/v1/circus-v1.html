@@ -194,6 +194,7 @@ const SCENES={
   backrow(t){ // 천막 뒷줄 / 천막 뒤 통로
     R(0,0,W,H,'#120606');for(let i=0;i<8;i++)R(i*16,0,8,H,'rgba(122,27,27,.5)');
     R(0,0,W,H,'rgba(0,0,0,.45)');audience(t,96,'#080303',true,0);audience(t,124,'#050202',true,3);
+    if(S.fig){R(56,30,3,60,'#1a0a0a');R(54,40,10,52,'#000');R(51,38,16,2,'#000');R(56,30,6,9,'#000');} // 천막 틈의 단장
   },
   corridor(t){
     R(0,0,W,H,'#0b0909');
@@ -257,6 +258,10 @@ const RING='신사 숙녀 여러분! 오늘 밤, 단 한 번뿐인 무대에 오
 const MEMORY='그리고 너 오늘 회전목마 쪽은 쳐다보지도 마. 저번에 타고 멀미해서 나한테 기댔잖아.';
 const NOTE='웃지 마\n따라 웃으면 거기 앉게 돼';
 const spared=()=>F.loops>=2; // 두 번 잡힌 뒤엔 추격을 봐줌(좌절 방지)
+// 입장 횟수: 판을 다시 해도 이어지게 이 브라우저에 저장 (세계는 기억한다). 저장이 막혀 있으면 그 판만 셈
+const KEY='dc_v1_entries';
+function pastEntries(){try{return +localStorage.getItem(KEY)||0}catch(e){return 0}}
+function saveEntries(){try{localStorage.setItem(KEY,pastEntries()+(F.loops||0)+1)}catch(e){}}
 
 /* ================= STORY ================= */
 const N={
@@ -393,12 +398,12 @@ const N={
   {w:'narr',t:'…토씨 하나 안 틀리고. 같은 억양, 같은 자리에서 숨을 쉬고.'},
   {w:'narr',t:'서아가 웃는다.',fx:'laugh'},
   {w:'narr',t:'천막 너머 객석의 웃음과 같은 높이, 같은 길이로.',do(){S.glitchy=1;osd('TRACKING');}},
-  {w:'narr',t:'서아의 주머니에서 쪽지가 떨어진다. 펼쳐진 채로.'},
+  F.note?{w:'narr',t:'서아의 주머니에서 쪽지가 떨어진다. 펼쳐진 채로.'}:{w:'narr',t:'서아의 주머니에서 구겨진 쪽지가 떨어진다. 언제 주웠는지 모르겠다. 펼쳐진 채로.'},
   {w:'sys',t:NOTE},
   {w:'seo',t:'신사 숙녀 여러분. 오늘 밤, 단 한 번뿐인 무대에—',do(){FX.glitch();setTimeout(()=>txt.classList.add('ring'),0);}},
   {w:'narr',t:'서아의 목소리. 단장의 억양.'},
-  {w:'narr',t:'뒤를 돈다. 복도 끝에 단장이 서 있다. 서아와 똑같은 각도로, 고개를 기울이고.',fx:'stinger',do(){S.scene='corridor';S.fig=2;S.shakeHead=0;}}],next:'uibreak'},
- uibreak:{scene:'corridor',lines:[{w:'narr',t:'도망쳐야 한다.'}],
+  {w:'narr',t:'뒤를 돈다. 찢어진 천막 틈 사이에 단장이 서 있다. 서아와 똑같은 각도로, 고개를 기울이고.',fx:'stinger',do(){S.fig=2;S.shakeHead=0;}}],next:'uibreak'},
+ uibreak:{scene:'backrow',lines:[{w:'narr',t:'도망쳐야 한다.'}],
   choices:[{l:'도망친다',to:'seat'},{l:'도망친다',to:'seat'},{l:'도망친다',to:'seat'}]},
  seat:{scene:'collapse',enter(){heartStop();humStop();musicStart(.6);A.detune=-90;A.rate=.7;S.fig=0;S.sync=true;osd('NO SIGNAL');},lines:[
   {w:'narr',t:'달리고 있다고 생각했는데, 앉아 있다.'},
@@ -414,7 +419,7 @@ const N={
   {w:'narr',t:'휴대폰이 짧게 진동한다.',fx:'buzz',do(){S.phone=1;}},
   {w:'msg',t:'서아\n어제 재밌었지? ㅋㅋ 담에 또 가자'},
   {w:'narr',t:'책상 위에 서커스 입장권. 뒷면에 작게:'},
-  {w:'sys',t:'입장 '+(4118+(F.loops||0)).toLocaleString()+'회째'},
+  {w:'sys',t:'입장 '+(4118+pastEntries()+(F.loops||0)).toLocaleString()+'회째'},
   {w:'narr',t:'천장 모서리, 벽지 이음매가 한 줄 어긋나 있다. 아주 조금.',do(){S.glitchy=1;}}],
   choices:[{l:'창문을 연다',to:'endW'},{l:'다시 눕는다',to:'endL'}]},
  endW:{scene:'room',lines:[
@@ -500,6 +505,7 @@ document.getElementById('startBtn').onclick=()=>{
 };
 const MOMENTS=['단장 인사가 반복될 때','음악이 내려앉을 때','객석이 동시에 웃을 때','고개들이 나를 향할 때','부적·불상·쪽지','비상구가 천막으로 이어질 때','비상구 표시가 사라졌을 때','복도 끝에서 지켜보는 단장','열린 우리','불 꺼지고 슥슥 소리','고개를 터는 단장·추격','잡혀서 돌아왔을 때','찢어진 틈','서아가 같은 말을 할 때','서아의 웃음','같은 버튼 세 개','앉아 있는 나','엔딩'];
 function endScreen(label){
+  saveEntries();
   const s=document.createElement('div');s.className='screen';s.id='endS';
   s.innerHTML=`<div class="ticket"><span>ENDING</span><b style="font-size:30px">${label}</b><span>${F.loops?'돌아온 횟수 '+F.loops:'한 번도 안 잡힘'}</span></div>`;
   stage.appendChild(s);
