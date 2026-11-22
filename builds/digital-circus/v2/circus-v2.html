@@ -34,7 +34,10 @@ button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
 #text.narr { color: var(--dim); }
 #choices { display: flex; flex-direction: column; gap: 8px; }
 #choices button { text-align: left; padding: 10px 14px; }
-#hint { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 0; right: 0; text-align: center; font-size: 0.8rem; color: var(--dim); transition: opacity 1.5s; pointer-events: none; }
+#hint { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px; text-align: center; font-size: 0.95rem; line-height: 1.6; color: var(--ink); background: var(--box); border: 1px solid var(--line); padding: 10px 12px; transition: opacity 1.5s; pointer-events: none; white-space: pre-line; }
+/* 장소·물건 이름표: 그림만으로 알아보기 어려운 것에 작게 붙인다 */
+#labels { pointer-events: none; }
+#labels span { position: absolute; transform: translate(-50%, -100%); font-size: 0.68rem; color: var(--ink); background: rgba(3, 17, 12, 0.7); padding: 1px 5px; white-space: nowrap; letter-spacing: 0.04em; }
 </style>
 
 <div id="app">
@@ -46,6 +49,7 @@ button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
   </div>
   <div id="vn" class="layer" hidden><canvas id="vnCanvas" class="pix" width="135" height="240"></canvas></div>
   <img id="seoa" class="sprite" alt="서아" hidden>
+  <div id="labels" class="layer"></div>
   <div id="hint" hidden></div>
   <div id="box" hidden><div id="name"></div><div id="text"></div><div id="choices"></div></div>
   <div id="flash" class="layer"></div>
@@ -268,6 +272,7 @@ function showSeoa(on) {
 function frame(t) {
   if (vn.scene === "bus") drawBus(t); else if (vn.scene === "room") drawRoom(t); else if (is2D()) draw2D(t); else { vx.fillStyle = "#000"; vx.fillRect(0, 0, 135, 240); }
   showSeoa(!$("vn").hidden && vn.big && vn.scene !== "black");
+  placeLabels(labelsFor());
   for (let i = 0; i < vn.glitch * 3; i++) if (Math.random() < 0.3) {
     const y = Math.floor(Math.random() * 240), h = 2 + Math.floor(Math.random() * 6);
     vx.drawImage(vc, 0, y, 135, h, (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 5), y, 135, h);
@@ -599,6 +604,30 @@ function drawTall(x, y) {
   vx.fillStyle = "#050505"; vx.fillRect(X + 1, Y + 3, 5, 1);
 }
 /** 맵을 깔고 나와 서아를 세운다. */
+const labelsEl = $("labels"); let labelKey = "";
+const MALL_LABELS = [["편의점", 18, 4], ["옷가게", 20, 86], ["관리실", 112, 6], ["안내도", 72, 86], ["비상구", 126, 62], ["정문", 68, 2]];
+/** 지금 화면에 붙일 이름표 [글자, 맵 x, 맵 y]. 정전 중이거나 2D가 아니면 없음. */
+function labelsFor() {
+  if ($("vn").hidden || W2.dark || !is2D()) return null;
+  return vn.scene === "mall" ? MALL_LABELS : [["자판기", 36, 46], [C.loop >= 4 ? "포스터" : "안내문", 36, 142], ["EXIT", 68, 4]];
+}
+/** 이름표를 맵 좌표에 맞춰 화면 위에 놓는다 (캔버스가 잘린 만큼 보정). */
+function placeLabels(list) {
+  const key = list ? list.map((l) => l[0]).join() : "";
+  if (key !== labelKey) { labelKey = key; labelsEl.innerHTML = list ? list.map((l) => `<span>${l[0]}</span>`).join("") : ""; }
+  if (!list) return;
+  const r = vc.getBoundingClientRect(), a = $("app").getBoundingClientRect(), s = Math.max(r.width / 135, r.height / 240);
+  const ox = r.left - a.left + (r.width - 135 * s) / 2, oy = r.top - a.top + (r.height - 240 * s) / 2;
+  [...labelsEl.children].forEach((el, i) => { el.style.left = ox + list[i][1] * s + "px"; el.style.top = oy + (list[i][2] + OY) * s + "px"; });
+}
+/** 복도의 살펴볼 것: 자판기, 안전 안내문(바퀴가 지나면 서커스 포스터), 벤치. */
+function corridorThings() {
+  return [
+    { x: 36, y: 52, r: 10, act: async () => { await say("", C.loop >= 2 ? "(자판기 불이 꺼져 있다. 안에 음료가 하나도 없다.)" : "(자판기. 불이 들어와 있다.)"); } },
+    { x: 36, y: 148, r: 10, act: async () => { await say("", C.loop >= 4 ? "(서커스 포스터. 단장이 이쪽을 보고 있다.)" : "(안전 안내문: '정전 시 그 자리에 멈춰 주십시오.')"); } },
+    { x: 92, y: 116, r: 9, act: async () => { await say("", "(아무도 앉지 않은 벤치.)"); } },
+  ];
+}
 function setMap(rows, x, y) {
   W2.map = rows; W2.px = x; W2.py = y; W2.sx = x; W2.sy = y + 10; W2.trail = []; W2.hold = W2.auto = null; W2.seoaAway = false;
   W2.seoa = { x: W2.sx, y: W2.sy, r: 8, act: () => seoaTalk2() };
@@ -756,7 +785,7 @@ function stair2Mall() {
       vn.face = "worry"; await say(S, "……여기 상가잖아.");
       await say(S, "빨래방 뒤가 상가였나.");
       box.hidden = true; vn.big = false; W2.busy = false;
-      hint("누르고 있으면 그쪽으로 걷기 · 짧게 누르면 살펴보기", 5000);
+      hint("화면을 누르고 있으면 그쪽으로 걸어가\n사람이나 물건을 짧게 누르면 살펴봐", 9000);
     })();
   }).then(() => { MUZ.stop(); });
 }
@@ -814,7 +843,7 @@ let BUZ = null;
 function stair3Corridor() {
   return new Promise((done) => {
     C.done = done; C.loop = 1; C.nextDark = 0;
-    vn.scene = "corridor"; setMap(CORR, 68, 188); W2.npcs = corridorNpcs(); W2.things = []; W2.tick = corridorTick;
+    vn.scene = "corridor"; setMap(CORR, 68, 188); W2.npcs = corridorNpcs(); W2.things = corridorThings(); W2.tick = corridorTick;
     BUZ = startBuzz();
     (async () => {
       W2.busy = true;
