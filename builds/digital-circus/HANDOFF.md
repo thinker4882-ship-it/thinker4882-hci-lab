@@ -124,7 +124,7 @@
 - 후기 6번(AI에 대한 질문)은 노션 아카이브 때 정리해서 넣기.
 - 갈림길 결정 → `design/blueprint-v2.md` (서커스는 일상 가상세계 속 장소 하나, 형식을 오감, 3D는 일부만, 장치 1·3·4·6·7·8, 대사 A/C톤).
 - v2 첫 장면 '밤 버스'(미연시 → 3D) → `v2/night-bus.html` · 비공개 아티팩트 https://claude.ai/artifact/6YkBgKWpxieHytCfbpNnVC · 비밀 흐름은 `script/secret/v2-night-bus.md`.
-- **다음**: 사용자 플레이 후기 → 가설(현실 어그러짐 / 쫓기다 길 잃음 / 서아 배신)과 비교 → 판별 지도는 플레이 뒤에(스포일러).
+- 사용자 플레이 후기 → `playtest/v2-night-bus-user-review.md`. 형식 전환·3D 추격 통과. 다음 후보: 전체 서사 얼개 / 힉스필드 그림 / 3D 조작감.
 
 **운영 메모**
 - 사용량: Pro. 에이전트 1개 ≈ 토큰 12만. 5시간 한도 확인은 get_usage.
