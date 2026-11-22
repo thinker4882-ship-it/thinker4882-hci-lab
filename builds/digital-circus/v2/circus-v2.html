@@ -899,19 +899,19 @@ function crowdLaugh() {
 }
 
 /* ===================== 계단 4: 서커스 (3D 1인칭) ===================== */
-const W3 = { yaw: 0, pitch: 0, x: 0, z: 2, keys: {}, joy: null, look: null, last: 0, ended: true, auto: null,
-  audience: [], extras: [], house: 0.8, exitIdx: 0, exitShifts: 0, breaks: 0, nextLaugh: 0, bob: 0,
-  dan: { x: 0, z: -7.5, active: false, grace: 0, lastMove: 0, panner: null }, seoa: { x: 0.8, z: 3 } };
+// 두 공간을 한 장면에 둔다: 원점의 천막(객석에 앉아 관람), x=100 쪽의 무대 뒤 복도(정해진 길로 도망).
+const W3 = { yaw: 0, pitch: 0, x: 0, z: 2, eyeY: 1.25, keys: {}, joy: null, look: null, last: 0, ended: true, auto: null,
+  phase: "tent", watch: true, audience: [], house: 0.8, bob: 0, trail: [],
+  dan: { x: 0, z: 0, mode: "off", ti: 0, t: 0, panner: null, step: 0 }, seoa: { x: 0, z: 0 }, si: 0 };
 let renderer, scene3, camera;
 const EXITS = [0, 1, 2, 3, 4, 5].map((i) => (i / 6) * Math.PI * 2 + 0.26); // 천막 틈 여섯 곳 (각도)
-const R_FLOOR = 7.6;                                                       // 무대 바닥 반지름 (여기까지 걸을 수 있음)
 
 /** 캔버스로 작은 텍스처를 만든다 (픽셀 그대로, PS1 느낌). */
 function canvasTex(w, h, draw) {
   const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
   const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; return t;
 }
-/** 앉은 관객 그림 (얼굴은 작은 점 두 개). seed로 옷·머리색이 바뀐다. */
+/** 앉은 관객 그림 (얼굴은 작은 점 두 개). seed로 옷·머리색이 바뀐다. blank면 눈이 없다. */
 function audienceTex(seed, white, blank) {
   const r = seeded(seed + 3), shirts = ["#5a6a8a", "#7a5a4a", "#3a5a4a", "#8a8a7a", "#6a3a3a", "#4a4a5a"], hairs = ["#16110f", "#3a2a1a", "#555", "#16110f"];
   return canvasTex(16, 24, (g) => {
@@ -922,81 +922,136 @@ function audienceTex(seed, white, blank) {
     g.fillStyle = "#2a2a3a"; g.fillRect(4, 19, 8, 3);
   });
 }
-/** 3D 장면을 한 번 짓는다: 천막, 무대, 객석, 관객, 형광등, 비상구 표지, 단장, 떠다니는 서아 그림. */
-function buildCircus() {
-  renderer = new THREE.WebGLRenderer({ canvas: $("gl"), antialias: false }); renderer.setPixelRatio(1);
-  scene3 = new THREE.Scene(); scene3.background = new THREE.Color(0x03110c); scene3.fog = new THREE.Fog(0x03110c, 3, 22);
-  camera = new THREE.PerspectiveCamera(70, 1, 0.05, 60); camera.rotation.order = "YXZ";
-  resize3D();
-  const lam = (c, map, side) => new THREE.MeshLambertMaterial({ color: c, map: map || null, side: side || THREE.FrontSide });
-  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); scene3.add(m); return m; };
-  scene3.add(new THREE.AmbientLight(0x6fae8c, 0.5));
-  W3.lights = [[0, 0], [4, 3], [-4, -3]].map(([x, z]) => { const p = new THREE.PointLight(0xcfffe0, 0.8, 14); p.position.set(x, 5, z); scene3.add(p); return p; });
-  // 무대 바닥(톱밥)과 둘레 턱
-  const dust = canvasTex(32, 32, (g) => { const r = seeded(9); for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const v = 110 + Math.floor(r() * 40); g.fillStyle = `rgb(${v},${v * 0.8 | 0},${v * 0.5 | 0})`; g.fillRect(x, y, 1, 1); } });
-  dust.wrapS = dust.wrapT = THREE.RepeatWrapping; dust.repeat.set(4, 4);
-  const floor = add(new THREE.CircleGeometry(8.2, 24), lam(0xffffff, dust), 0, 0, 0); floor.rotation.x = -Math.PI / 2;
-  const curb = add(new THREE.CylinderGeometry(8.3, 8.3, 0.4, 24, 1, true), lam(0xa83a2a, null, THREE.DoubleSide), 0, 0.2, 0);
-  // 천막 벽(빨강·크림 줄무늬, 어둡게)과 지붕
-  const stripes = canvasTex(64, 8, (g) => { for (let x = 0; x < 64; x += 8) { g.fillStyle = "#6a2a24"; g.fillRect(x, 0, 4, 8); g.fillStyle = "#8a7a62"; g.fillRect(x + 4, 0, 4, 8); } });
-  stripes.wrapS = THREE.RepeatWrapping; stripes.repeat.set(4, 1);
-  add(new THREE.CylinderGeometry(13, 13, 5, 24, 1, true), lam(0xffffff, stripes, THREE.BackSide), 0, 2.5, 0);
-  add(new THREE.ConeGeometry(13, 7, 24, 1, true), lam(0x4a2a24, stripes, THREE.BackSide), 0, 8.5, 0);
-  const ground = add(new THREE.CircleGeometry(13, 24), lam(0x1d3a30), 0, -0.01, 0); ground.rotation.x = -Math.PI / 2;
-  // 천막인데 천장에 사무실 형광등
-  W3.tubes = [];
-  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, m = add(new THREE.BoxGeometry(1.4, 0.05, 0.14), new THREE.MeshBasicMaterial({ color: 0xdfffe8 }), Math.cos(a) * 5, 5.2, Math.sin(a) * 5); m.rotation.y = -a; W3.tubes.push(m); }
-  // 객석 4단: 천막 틈(비상구 자리)만 비워 둔다
-  const seatMat = lam(0x24406a), r = seeded(17);
-  const nearExit = (a) => EXITS.some((e) => Math.abs(((a - e + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.22);
-  W3.emptySeat = null;
-  for (let tier = 0; tier < 4; tier++) for (let i = 0; i < 28; i++) {
-    const a = i / 28 * Math.PI * 2, rad = 9 + tier * 0.9, h = 0.45 * (tier + 1);
-    if (nearExit(a)) continue;
-    const b = add(new THREE.BoxGeometry(1.8, h, 0.85), seatMat, Math.cos(a) * rad, h / 2, Math.sin(a) * rad); b.rotation.y = -a + Math.PI / 2;
-    const pos = { x: Math.cos(a) * (rad - 0.1), y: h + 0.45, z: Math.sin(a) * (rad - 0.1), a };
-    if (tier === 1 && !W3.emptySeat && a > 2.2) { W3.emptySeat = pos; W3.leaver = addBillboard(audienceTex(999), 0.6, 0.9, pos.x, pos.y, pos.z); W3.audience.push(W3.leaver); continue; } // 나중에 비게 될 자리
-    if (r() < 0.55 || (tier === 0 && i === 3)) {
-      const m = addBillboard(audienceTex(tier * 31 + i, tier === 0 && i === 3), 0.6, 0.9, pos.x, pos.y, pos.z); W3.audience.push(m);
-      if (tier === 0 && i === 3) W3.neighbor = m; // 서서 보는 자리 바로 옆 사람
-    }
-  }
-  W3.blankTex = audienceTex(3, true, true);
-  // 천막 틈마다 어두운 입구, 그중 하나에만 초록 비상구 표지
-  EXITS.forEach((a) => { const m = add(new THREE.PlaneGeometry(1.6, 2.6), new THREE.MeshBasicMaterial({ color: 0x010403 }), Math.cos(a) * 12.9, 1.3, Math.sin(a) * 12.9); m.lookAt(0, 1.3, 0); });
-  const sign = canvasTex(32, 12, (g) => { g.fillStyle = "#052"; g.fillRect(0, 0, 32, 12); g.fillStyle = "#7f8"; g.font = "9px sans-serif"; g.fillText("비상구", 3, 10); });
-  W3.sign = add(new THREE.PlaneGeometry(1.1, 0.4), new THREE.MeshBasicMaterial({ map: sign }), 0, 3, 0);
-  // 단장: 키 큰 검은 형체, 얼굴 자리만 희다
-  const danTex = canvasTex(24, 72, (g) => { g.fillStyle = "#050505"; g.fillRect(5, 0, 14, 6); g.fillRect(3, 16, 18, 56); g.fillStyle = "#e8e2d8"; g.fillRect(7, 5, 10, 11); g.fillStyle = "#050505"; g.fillRect(8, 12, 8, 1); });
-  W3.danMesh = addBillboard(danTex, 0.85, 2.6, 0, 1.3, -30); W3.danMesh.visible = false;
-  // 서아: 미연시 그림이 그대로 3D 안에 떠 있다
-  const loader = new THREE.TextureLoader();
-  W3.seoaTex = { calm: loader.load("img/seoa-calm.png"), wrong: loader.load("img/seoa-wrong.png") };
-  W3.seoaMesh = addBillboard(W3.seoaTex.calm, 0.62, 0.82, 0.8, 1.35, 3);
-  W3.dan.panner = makePanner(0, 0.2, -30);
-  // 공연 소품: 저글러(공 셋), 광대(서 있는/넘어진), 사라지는 상자, 조명 원뿔
-  W3.props = [];
-  const prop = (tex) => { const m = addBillboard(tex, 0.55, 1.8, 0, 0.9, 0); m.visible = false; W3.props.push(m); return m; };
-  W3.juggler = prop(standTex("#a83a2a"));
-  W3.balls = ["#e8d040", "#d04040", "#40a0d0"].map((c) => { const b = add(new THREE.SphereGeometry(0.07, 6, 4), new THREE.MeshBasicMaterial({ color: c }), 0, -5, 0); b.visible = false; return b; });
-  const clown = (g) => { g.fillStyle = "#e8e2d8"; g.fillRect(5, 1, 6, 8); g.fillStyle = "#d02020"; g.fillRect(7, 5, 2, 2); g.fillStyle = "#111"; g.fillRect(6, 3, 1, 1); g.fillRect(9, 3, 1, 1);
-    g.fillStyle = "#3a6ad0"; g.fillRect(2, 9, 12, 16); g.fillStyle = "#e8d040"; g.fillRect(6, 11, 4, 4); g.fillStyle = "#d02020"; g.fillRect(3, 25, 4, 14); g.fillRect(9, 25, 4, 14); };
-  W3.clown = prop(canvasTex(16, 40, clown));
-  W3.clownDownTex = canvasTex(40, 16, (g) => { g.translate(40, 0); g.rotate(Math.PI / 2); clown(g); });
-  W3.cabinet = new THREE.Group(); scene3.add(W3.cabinet); W3.cabinet.visible = false;
-  const cab = lam(0x5a1a24), part = (w, h, d, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cab); m.position.set(x, y, z); W3.cabinet.add(m); return m; };
-  part(1, 2.2, 0.05, 0, 1.1, -0.4); part(0.05, 2.2, 0.8, -0.5, 1.1, 0); part(0.05, 2.2, 0.8, 0.5, 1.1, 0); part(1, 0.05, 0.8, 0, 2.2, 0);
-  W3.door = part(1, 2.2, 0.05, 0, 1.1, 0.4); W3.door.visible = false;
-  const cone = new THREE.ConeGeometry(0.9, 1, 12, 1, true); cone.translate(0, -0.5, 0); cone.rotateX(-Math.PI / 2); // 꼭짓점이 원점, 밑면이 +Z 쪽
-  W3.spot = new THREE.Mesh(cone, new THREE.MeshBasicMaterial({ color: 0xf4ffe8, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
-  W3.spot.visible = false; scene3.add(W3.spot);
-  bind3D();
+/** 서 있는 사람 그림 (셔츠 색만 다르게). blank면 눈이 없다. */
+function standTex(shirt, blank) {
+  return canvasTex(16, 40, (g) => { g.fillStyle = "#16110f"; g.fillRect(5, 0, 6, 3); g.fillStyle = "#d8cdbd"; g.fillRect(5, 2, 6, 7); g.fillStyle = "#111"; if (!blank) { g.fillRect(6, 5, 1, 1); g.fillRect(9, 5, 1, 1); }
+    g.fillStyle = shirt; g.fillRect(3, 9, 10, 15); g.fillStyle = "#2a2a3a"; g.fillRect(4, 24, 3, 15); g.fillRect(9, 24, 3, 15); });
 }
 /** 늘 나를 향해 도는 평면 그림 하나. */
 function addBillboard(tex, w, h, x, y, z) {
   tex.magFilter = THREE.NearestFilter;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.4 }));
   m.position.set(x, y, z); m.userData.baseY = y; scene3.add(m); return m;
+}
+const lam = (c, map, side) => new THREE.MeshLambertMaterial({ color: c, map: map || null, side: side || THREE.FrontSide });
+const add3 = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); scene3.add(m); return m; };
+
+/** 3D 장면을 한 번 짓는다: 천막(객석·관객·공연 소품)과 무대 뒤 복도. */
+function buildCircus() {
+  renderer = new THREE.WebGLRenderer({ canvas: $("gl"), antialias: false }); renderer.setPixelRatio(1);
+  scene3 = new THREE.Scene(); scene3.background = new THREE.Color(0x03110c); scene3.fog = new THREE.Fog(0x03110c, 3, 22);
+  camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80); camera.rotation.order = "YXZ";
+  resize3D();
+  scene3.add(new THREE.AmbientLight(0x6fae8c, 0.5));
+  W3.lights = [[0, 0], [4, 3], [-4, -3]].map(([x, z]) => { const p = new THREE.PointLight(0xcfffe0, 0.8, 14); p.position.set(x, 5, z); scene3.add(p); return p; });
+  W3.lamp = new THREE.PointLight(0xcfffe0, 0, 9); scene3.add(W3.lamp); // 복도에서 내 주변만 비추는 빛
+  // 무대 바닥(톱밥)과 둘레 턱
+  const dust = canvasTex(32, 32, (g) => { const r = seeded(9); for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const v = 110 + Math.floor(r() * 40); g.fillStyle = `rgb(${v},${v * 0.8 | 0},${v * 0.5 | 0})`; g.fillRect(x, y, 1, 1); } });
+  dust.wrapS = dust.wrapT = THREE.RepeatWrapping; dust.repeat.set(4, 4);
+  add3(new THREE.CircleGeometry(8.2, 24), lam(0xffffff, dust), 0, 0, 0).rotation.x = -Math.PI / 2;
+  add3(new THREE.CylinderGeometry(8.3, 8.3, 0.4, 24, 1, true), lam(0xa83a2a, null, THREE.DoubleSide), 0, 0.2, 0);
+  // 천막 벽과 지붕 (무너질 때 땅으로 꺼진다)
+  const stripes = canvasTex(64, 8, (g) => { for (let x = 0; x < 64; x += 8) { g.fillStyle = "#6a2a24"; g.fillRect(x, 0, 4, 8); g.fillStyle = "#8a7a62"; g.fillRect(x + 4, 0, 4, 8); } });
+  stripes.wrapS = THREE.RepeatWrapping; stripes.repeat.set(4, 1);
+  W3.tent = [add3(new THREE.CylinderGeometry(13, 13, 5, 24, 1, true), lam(0xffffff, stripes, THREE.BackSide), 0, 2.5, 0),
+    add3(new THREE.ConeGeometry(13, 7, 24, 1, true), lam(0x4a2a24, stripes, THREE.BackSide), 0, 8.5, 0)];
+  EXITS.forEach((a) => { const m = add3(new THREE.PlaneGeometry(1.6, 2.6), new THREE.MeshBasicMaterial({ color: 0x010403 }), Math.cos(a) * 12.9, 1.3, Math.sin(a) * 12.9); m.lookAt(0, 1.3, 0); W3.tent.push(m); });
+  W3.tent.forEach((m) => (m.userData.y0 = m.position.y));
+  add3(new THREE.CircleGeometry(60, 24), lam(0x1d3a30), 0, -0.01, 0).rotation.x = -Math.PI / 2;
+  // 천막인데 천장에 사무실 형광등. 천막 밖에는 끝없는 사무실 천장 (무너진 뒤에만 보인다)
+  W3.tubes = [];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, m = add3(new THREE.BoxGeometry(1.4, 0.05, 0.14), new THREE.MeshBasicMaterial({ color: 0xdfffe8 }), Math.cos(a) * 5, 5.2, Math.sin(a) * 5); m.rotation.y = -a; W3.tubes.push(m); }
+  W3.outside = new THREE.Group(); W3.outside.visible = false; scene3.add(W3.outside);
+  for (let x = -40; x <= 40; x += 5) for (let z = -40; z <= 40; z += 5) if (Math.hypot(x, z) > 15) { const m = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.05, 0.14), new THREE.MeshBasicMaterial({ color: 0xdfffe8 })); m.position.set(x, 3.2, z); W3.outside.add(m); }
+  // 객석 4단. 맨 앞줄 8·9번은 나와 서아 자리, 7번은 옆자리 사람
+  const seatMat = lam(0x24406a), r = seeded(17);
+  const nearExit = (a) => EXITS.some((e) => Math.abs(((a - e + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.22);
+  for (let tier = 0; tier < 4; tier++) for (let i = 0; i < 28; i++) {
+    const a = i / 28 * Math.PI * 2, rad = 9 + tier * 0.9, h = 0.45 * (tier + 1);
+    if (nearExit(a)) continue;
+    add3(new THREE.BoxGeometry(1.8, h, 0.85), seatMat, Math.cos(a) * rad, h / 2, Math.sin(a) * rad).rotation.y = -a + Math.PI / 2;
+    const pos = { x: Math.cos(a) * (rad - 0.1), y: h + 0.45, z: Math.sin(a) * (rad - 0.1), a };
+    if (tier === 0 && i === 8) { W3.mySeat = pos; continue; }
+    if (tier === 0 && i === 9) { W3.seoaSeat = pos; continue; }
+    if (r() < 0.6 || (tier === 0 && i === 7)) {
+      const m = addBillboard(audienceTex(tier * 31 + i, tier === 0 && i === 7), 0.6, 0.9, pos.x, pos.y, pos.z); m.userData.seed = tier * 31 + i; W3.audience.push(m);
+      if (tier === 0 && i === 7) W3.neighbor = m;
+    }
+  }
+  W3.blankTex = audienceTex(7, true, true);
+  // 단장: 키 큰 검은 형체, 얼굴 자리만 희다
+  const danTex = canvasTex(24, 72, (g) => { g.fillStyle = "#050505"; g.fillRect(5, 0, 14, 6); g.fillRect(3, 16, 18, 56); g.fillStyle = "#e8e2d8"; g.fillRect(7, 5, 10, 11); g.fillStyle = "#050505"; g.fillRect(8, 12, 8, 1); });
+  W3.danMesh = addBillboard(danTex, 0.85, 2.6, 0, 1.3, 0); W3.danMesh.visible = false;
+  W3.dan.panner = makePanner(0, 0.2, -30);
+  // 서아: 미연시 그림이 그대로 3D 안에 떠 있다
+  const loader = new THREE.TextureLoader();
+  W3.seoaTex = { calm: loader.load("img/seoa-calm.png"), worry: loader.load("img/seoa-worry.png"), wrong: loader.load("img/seoa-wrong.png") };
+  W3.seoaMesh = addBillboard(W3.seoaTex.calm, 0.62, 0.82, 0, 1.2, 0);
+  // 공연 소품: 저글러(공 셋), 광대(서 있는/넘어진)
+  W3.props = [];
+  const prop = (tex) => { const m = addBillboard(tex, 0.55, 1.8, 0, 0.9, 0); m.visible = false; W3.props.push(m); return m; };
+  W3.juggler = prop(standTex("#a83a2a"));
+  W3.balls = ["#e8d040", "#d04040", "#40a0d0"].map((c) => { const b = add3(new THREE.SphereGeometry(0.08, 6, 4), new THREE.MeshBasicMaterial({ color: c }), 0, -5, 0); b.visible = false; return b; });
+  const clown = (g) => { g.fillStyle = "#e8e2d8"; g.fillRect(5, 1, 6, 8); g.fillStyle = "#d02020"; g.fillRect(7, 5, 2, 2); g.fillStyle = "#111"; g.fillRect(6, 3, 1, 1); g.fillRect(9, 3, 1, 1);
+    g.fillStyle = "#3a6ad0"; g.fillRect(2, 9, 12, 16); g.fillStyle = "#e8d040"; g.fillRect(6, 11, 4, 4); g.fillStyle = "#d02020"; g.fillRect(3, 25, 4, 14); g.fillRect(9, 25, 4, 14); };
+  W3.clownTex = canvasTex(16, 40, clown); W3.clown = prop(W3.clownTex);
+  W3.clownDownTex = canvasTex(40, 16, (g) => { g.translate(40, 0); g.rotate(Math.PI / 2); clown(g); });
+  buildBackstage();
+  bind3D();
+}
+
+/* ---------- 무대 뒤 복도: 칸 하나 = 2m ---------- */
+// #=벽 .=바닥 D=문 S=시작(단장도 여기로 들어온다) E=비상구 a=앞길에 단장이 나타나는 곳
+const BACK = [
+  "################",
+  "#E..############",
+  "###.############",
+  "###.#...D.######",
+  "###.D...#.######",
+  "#####...#.######",
+  "#########D######",
+  "#....a.........#",
+  "#.##############",
+  "#S##############",
+  "################",
+];
+const BX = 100, BC = 2;
+const cw = (cx) => BX + cx * BC + BC / 2, cz = (cy) => cy * BC + BC / 2; // 칸 → 세계 좌표(칸 가운데)
+const ROUTE = [[1, 8], [1, 7], [5, 7], [9, 7], [9, 5], [9, 3], [8, 3], [6, 4], [4, 4], [3, 4], [3, 2], [3, 1], [2, 1]]; // 서아가 앞서 가는 길
+/** 그 자리의 칸 글자 (밖이면 벽). */
+function cellAt(x, z) { const row = BACK[Math.floor(z / BC)]; return (row && row[Math.floor((x - BX) / BC)]) || "#"; }
+/** 지나갈 수 있는 자리인지 (닫힌 문은 벽). */
+function walkable(x, z) {
+  const c = cellAt(x, z); if (c === "#") return false;
+  if (c === "D" || c === "E") { const d = W3.doors[Math.floor((x - BX) / BC) + "," + Math.floor(z / BC)]; return d && d.open; }
+  return true;
+}
+/** 복도를 짓는다: 바닥·천장·벽·문·형광등·분장실의 얼굴 없는 사람들·비상구 표지. */
+function buildBackstage() {
+  const W = BACK[0].length, H = BACK.length;
+  const lino = canvasTex(16, 16, (g) => { for (let y = 0; y < 16; y += 8) for (let x = 0; x < 16; x += 8) { g.fillStyle = (x + y) % 16 ? "#5d6b62" : "#77857a"; g.fillRect(x, y, 8, 8); } });
+  lino.wrapS = lino.wrapT = THREE.RepeatWrapping; lino.repeat.set(W, H);
+  add3(new THREE.PlaneGeometry(W * BC, H * BC), lam(0xffffff, lino), BX + W, 0, H).rotation.x = -Math.PI / 2;
+  add3(new THREE.PlaneGeometry(W * BC, H * BC), lam(0x2a3a32), BX + W, 3, H).rotation.x = Math.PI / 2;
+  const paint = canvasTex(16, 24, (g) => { g.fillStyle = "#8fa898"; g.fillRect(0, 0, 16, 24); g.fillStyle = "#4f6458"; g.fillRect(0, 16, 16, 8); g.fillStyle = "#2a3a32"; g.fillRect(0, 15, 16, 1); });
+  const wallMat = lam(0xffffff, paint), doorMat = lam(0x55625a), wallGeo = new THREE.BoxGeometry(BC, 3, BC);
+  W3.doors = {}; W3.backLights = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = BACK[y][x], open = (dx, dy) => (BACK[y + dy] || "#")[x + dx] && (BACK[y + dy] || "#")[x + dx] !== "#";
+    if (c === "#") { if (open(1, 0) || open(-1, 0) || open(0, 1) || open(0, -1)) add3(wallGeo, wallMat, cw(x), 1.5, cz(y)); continue; }
+    if (c === "D" || c === "E") { // 통로를 가로막는 얇은 문 (열리면 천장으로 올라간다)
+      const across = open(1, 0) || open(-1, 0) ? "z" : "x";
+      const m = add3(across === "x" ? new THREE.BoxGeometry(BC, 3, 0.15) : new THREE.BoxGeometry(0.15, 3, BC), c === "E" ? lam(0x3a5a48) : doorMat, cw(x), 1.5, cz(y));
+      W3.doors[x + "," + y] = { mesh: m, open: false, t: 0, exit: c === "E", x: cw(x), z: cz(y) };
+    }
+    if ((x + y) % 2 === 0) { const t = add3(new THREE.BoxGeometry(0.14, 0.05, 1.4), new THREE.MeshBasicMaterial({ color: 0xdfffe8 }), cw(x), 2.97, cz(y)); W3.backLights.push(t); }
+  }
+  // 비상구 표지 (E 문 위)
+  const sign = canvasTex(32, 12, (g) => { g.fillStyle = "#052"; g.fillRect(0, 0, 32, 12); g.fillStyle = "#7f8"; g.font = "9px sans-serif"; g.fillText("비상구", 3, 10); });
+  const s = add3(new THREE.PlaneGeometry(1.1, 0.4), new THREE.MeshBasicMaterial({ map: sign }), cw(1) + 0.9, 2.6, cz(1)); s.rotation.y = Math.PI / 2; W3.exitSign = s;
+  // 분장실: 거울 줄과 얼굴 없는 흰 셔츠 사람들
+  for (let i = 0; i < 3; i++) add3(new THREE.PlaneGeometry(1.2, 0.9), new THREE.MeshBasicMaterial({ color: 0xa8c4b6 }), cw(5) + i * 2, 1.6, cz(3) - 0.99);
+  W3.dressers = [[5.3, 3.4], [6.6, 3.7], [5.6, 4.6], [7.4, 4.2], [6.2, 5.4], [7.2, 5.5]].map(([x, y]) => addBillboard(standTex("#d8dccf", true), 0.55, 1.8, BX + x * BC, 0.9, y * BC));
 }
 /** 3D 캔버스를 낮은 해상도로 (가로 170픽셀을 크게 늘려 거칠게). */
 function resize3D() {
@@ -1005,14 +1060,13 @@ function resize3D() {
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize3D);
-/** 조작: 왼쪽 아래를 누른 채 움직이면 걷기(가상 조이스틱), 나머지를 끌면 둘러보기. 키보드 WASD·방향키도. */
+/** 조작: 마우스는 어디를 끌어도 둘러보기. 손가락은 왼쪽 아래에서 조이스틱, 나머지는 둘러보기. 키보드 WASD·방향키도. */
 function bind3D() {
   const cv = $("gl"), stick = $("stick");
   cv.addEventListener("pointerdown", (e) => {
     if (W3.ended || W3.auto || W3.cut || !box.hidden) return;
     const r = cv.getBoundingClientRect(), lx = (e.clientX - r.left) / r.width, ly = (e.clientY - r.top) / r.height;
     cv.setPointerCapture(e.pointerId);
-    // 마우스는 어디를 끌어도 둘러보기. 손가락만 왼쪽 아래에서 조이스틱
     if (e.pointerType !== "mouse" && !W3.watch && lx < 0.5 && ly > 0.55) { W3.joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 }; stick.hidden = false; stick.style.left = e.clientX - $("app").getBoundingClientRect().left + "px"; stick.style.top = e.clientY - $("app").getBoundingClientRect().top + "px"; }
     else W3.look = { id: e.pointerId, x: e.clientX, y: e.clientY };
   });
@@ -1028,244 +1082,263 @@ function bind3D() {
   window.addEventListener("keydown", (e) => { W3.keys[e.key.toLowerCase()] = true; });
   window.addEventListener("keyup", (e) => { W3.keys[e.key.toLowerCase()] = false; });
 }
-/** 단장이 정면 시야 안에 있는지. */
-function danSeen() {
-  const dx = W3.dan.x - W3.x, dz = W3.dan.z - W3.z, d = Math.hypot(dx, dz) || 1;
-  return (dx / d) * -Math.sin(W3.yaw) + (dz / d) * -Math.cos(W3.yaw) > 0.88 && Math.abs(W3.pitch) < 0.6;
-}
-/** 비상구 표지를 idx번 틈 위에 건다. */
-function placeSign(idx) { const a = EXITS[idx]; W3.exitIdx = idx; W3.sign.position.set(Math.cos(a) * 12.7, 3, Math.sin(a) * 12.7); W3.sign.lookAt(0, 3, 0); }
 /** 형광등이 잠깐 꺼졌다 켜진다. */
 function flicker3() {
-  W3.lights.forEach((l) => (l.intensity = 0.1)); W3.tubes.forEach((m) => m.material.color.setHex(0x223a30));
-  setTimeout(() => { W3.lights.forEach((l) => (l.intensity = W3.house)); W3.tubes.forEach((m) => m.material.color.setHex(0xdfffe8)); }, 90 + Math.random() * 120);
+  W3.lights.forEach((l) => (l.intensity = 0.1)); W3.tubes.concat(W3.backLights).forEach((m) => m.material.color.setHex(0x223a30));
+  setTimeout(() => { W3.lights.forEach((l) => (l.intensity = W3.house)); W3.tubes.concat(W3.backLights).forEach((m) => m.material.color.setHex(0xdfffe8)); }, 90 + Math.random() * 120);
 }
 let circusHooks = null;
-/** 3D 한 프레임: 이동 → 서아·관객·단장 → 비상구 도착 확인 → 렌더. */
+/** 복도에서 걷기: 벽에 닿으면 그 축만 막는다 (몸 반지름 0.3). */
+function moveBack(dx, dz) {
+  const ok = (x, z) => walkable(x - 0.3, z - 0.3) && walkable(x + 0.3, z - 0.3) && walkable(x - 0.3, z + 0.3) && walkable(x + 0.3, z + 0.3);
+  if (ok(W3.x + dx, W3.z)) W3.x += dx;
+  if (ok(W3.x, W3.z + dz)) W3.z += dz;
+}
+/** 문: 나나 서아가 가까이 오면 철컥 소리 뒤에 열린다. 비상구 문은 열리지 않는다. */
+function tickDoors(now) {
+  Object.values(W3.doors).forEach((d) => {
+    d.mesh.position.y += ((d.open ? 4.4 : 1.5) - d.mesh.position.y) * 0.25;
+    if (d.exit || d.locked) return;
+    const near = Math.hypot(W3.x - d.x, W3.z - d.z) < 1.9 || Math.hypot(W3.seoa.x - d.x, W3.seoa.z - d.z) < 1.4;
+    if (near && !d.open && !d.t) { d.t = now + 350; burst(700, 0.06, 0.15); }
+    if (d.t && now > d.t && !d.open) { d.open = true; burst(260, 0.25, 0.12); }
+  });
+}
+/** 복도의 단장: 처음엔 내가 지나온 자리를 그대로 밟아 온다. 앞길에 나타났을 땐 곧장 다가온다. */
+function tickDan(now, dt) {
+  const D = W3.dan; if (D.mode === "off" || D.mode === "wait") return;
+  if (D.mode === "start") { if (now < D.t) return; D.mode = "trail"; D.ti = 0; Object.assign(D, { x: cw(1), z: cz(9) }); W3.danMesh.visible = true; burst(200, 0.3, 0.3); }
+  let tx, tz, sp;
+  if (D.mode === "trail") { const p = W3.trail[Math.min(D.ti, W3.trail.length - 1)]; if (!p) return; tx = p.x; tz = p.z; sp = 2.25; }
+  else { tx = W3.x; tz = W3.z; sp = 1.9; } // ahead
+  const dx = tx - D.x, dz = tz - D.z, d = Math.hypot(dx, dz);
+  if (d < 0.12) { if (D.mode === "trail" && D.ti < W3.trail.length - 1) D.ti++; }
+  else { const s = Math.min(d, sp * dt), nx = D.x + dx / d * s, nz = D.z + dz / d * s; if (D.mode === "trail" || walkable(nx, nz)) { D.x = nx; D.z = nz; } }
+  D.step += dt; if (D.step > 0.34) { D.step = 0; stepAt(D.panner, 1.2); }
+  setPannerPos(D.panner, D.x, 0.2, D.z);
+  if (Math.hypot(W3.x - D.x, W3.z - D.z) < 0.8) circusHooks.caught();
+}
+/** 서아가 정해진 길을 앞서 간다. 내가 가까이 와야 다음 자리로 옮긴다. */
+function tickSeoa(dt) {
+  const t = ROUTE[W3.si], tx = cw(t[0]), tz = cz(t[1]), dx = tx - W3.seoa.x, dz = tz - W3.seoa.z, d = Math.hypot(dx, dz);
+  if (d > 0.05) { const s = Math.min(d, 3.4 * dt); W3.seoa.x += dx / d * s; W3.seoa.z += dz / d * s; }
+  else if (W3.si < ROUTE.length - 1 && Math.hypot(W3.x - tx, W3.z - tz) < 3.6) W3.si++;
+}
+/** 3D 한 프레임. */
 function frame3(now) {
   if (W3.ended) return;
   const dt = Math.min(0.05, (now - (W3.last || now)) / 1000); W3.last = now;
   const k = W3.keys;
   if (W3.auto) { // 저절로 끌려가는 중
     const a = W3.auto, p = Math.min(1, (now - a.t0) / a.ms);
-    W3.x = a.from.x + (a.to.x - a.from.x) * p; W3.z = a.from.z + (a.to.z - a.from.z) * p; a.y = 1.55 + (a.to.y - 1.55) * p;
+    W3.x = a.from.x + (a.to.x - a.from.x) * p; W3.z = a.from.z + (a.to.z - a.from.z) * p;
     W3.yaw += (a.yaw - W3.yaw) * 0.05; W3.pitch *= 0.95;
     if (p >= 1 && a.done) { const d = a.done; a.done = null; d(); }
   } else if (box.hidden && !W3.cut) {
     let fwd = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0), side = (k.d ? 1 : 0) - (k.a ? 1 : 0);
     if (k.arrowleft) W3.yaw += 1.8 * dt; if (k.arrowright) W3.yaw -= 1.8 * dt;
     if (W3.joy) { fwd = -W3.joy.dy; side = W3.joy.dx; }
-    if (W3.watch) fwd = side = 0; // 공연 보는 동안엔 둘러보기만
-    if (fwd || side) {
-      const sp = 1.6 * dt, nx = W3.x + (-Math.sin(W3.yaw) * fwd + Math.cos(W3.yaw) * side) * sp, nz = W3.z + (-Math.cos(W3.yaw) * fwd - Math.sin(W3.yaw) * side) * sp;
-      const d = Math.hypot(nx, nz), s = d > R_FLOOR ? R_FLOOR / d : 1;
-      W3.x = nx * s; W3.z = nz * s;
-      W3.stepAcc = (W3.stepAcc || 0) + dt; if (W3.stepAcc > 0.45) { W3.stepAcc = 0; burst(500, 0.05, 0.06); }
+    if (!W3.watch && (fwd || side)) {
+      const sp = 2.7 * dt;
+      moveBack((-Math.sin(W3.yaw) * fwd + Math.cos(W3.yaw) * side) * sp, (-Math.cos(W3.yaw) * fwd - Math.sin(W3.yaw) * side) * sp);
+      W3.stepAcc = (W3.stepAcc || 0) + dt; if (W3.stepAcc > 0.3) { W3.stepAcc = 0; burst(500, 0.05, 0.06); }
     }
   }
-  // 연출 중엔 시선을 대상 쪽으로 천천히 돌린다
   if (W3.lookTarget) { const p = W3.lookTarget.position; let d = Math.atan2(-(p.x - W3.x), -(p.z - W3.z)) - W3.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); W3.yaw += d * 0.06; W3.pitch *= 0.9; }
-  // 객석으로 올라가려 하면(비상구가 아닌 가장자리를 계속 밀면) 한 번, 서아가 말린다
-  const e0 = EXITS[W3.exitIdx];
-  if (W3.dan.active && !W3.grabbed && box.hidden && Math.hypot(W3.x, W3.z) > R_FLOOR - 0.3 && Math.hypot(W3.x - Math.cos(e0) * R_FLOOR, W3.z - Math.sin(e0) * R_FLOOR) > 2.5) {
-    W3.edgeT = (W3.edgeT || 0) + dt; if (W3.edgeT > 0.6) { W3.grabbed = true; circusHooks.grab(); }
-  } else W3.edgeT = 0;
-  camera.position.set(W3.x, W3.auto ? W3.auto.y : 1.55, W3.z); camera.rotation.y = W3.yaw; camera.rotation.x = W3.pitch;
-  setListener(W3.x, 1.55, W3.z, W3.yaw);
-  // 서아 그림이 왼쪽 뒤에서 따라온다
-  if (!W3.seoaFixed) { const tx = W3.x + Math.sin(W3.yaw) * 0.9 - Math.cos(W3.yaw) * 0.7, tz = W3.z + Math.cos(W3.yaw) * 0.9 + Math.sin(W3.yaw) * 0.7; W3.seoa.x += (tx - W3.seoa.x) * 0.04; W3.seoa.z += (tz - W3.seoa.z) * 0.04; }
-  W3.seoaMesh.position.set(W3.seoa.x, 1.35 + Math.sin(now / 900) * 0.03, W3.seoa.z); W3.seoaMesh.lookAt(camera.position);
-  // 관객: 늘 나를 보고, 웃을 때 다 같이 들썩인다
-  W3.props.forEach((m) => m.visible && m.lookAt(camera.position.x, m.position.y, camera.position.z));
+  camera.position.set(W3.x + (W3.shake ? (Math.random() - 0.5) * 0.08 : 0), W3.eyeY, W3.z); camera.rotation.y = W3.yaw; camera.rotation.x = W3.pitch;
+  setListener(W3.x, W3.eyeY, W3.z, W3.yaw);
+  if (W3.phase === "back") {
+    W3.lamp.position.set(W3.x, 2.4, W3.z);
+    const last = W3.trail[W3.trail.length - 1];
+    if (!last || Math.hypot(W3.x - last.x, W3.z - last.z) > 0.3) W3.trail.push({ x: W3.x, z: W3.z });
+    if (!W3.cut && !W3.auto) { tickDoors(now); tickSeoa(dt); tickDan(now, dt); }
+    if (!W3.cut && !W3.auto) circusHooks.backTick(now);
+    if (Math.random() < 0.004) flicker3();
+  }
+  W3.seoaMesh.position.set(W3.seoa.x, (W3.phase === "back" ? 1.35 : 1.2) + Math.sin(now / 900) * 0.03, W3.seoa.z); W3.seoaMesh.lookAt(camera.position);
+  // 관객·소품·분장실 사람들은 늘 나를 본다. 웃을 때 관객이 다 같이 들썩인다
+  const lift = now - W3.bob < 800 ? Math.abs(Math.sin((now - W3.bob) / 800 * Math.PI * 4)) * 0.06 : 0;
+  W3.audience.forEach((m) => { m.position.y = m.userData.baseY + lift; m.lookAt(camera.position.x, m.position.y, camera.position.z); });
+  W3.props.concat(W3.dressers).forEach((m) => m.visible && m.lookAt(camera.position.x, m.position.y, camera.position.z));
   if (W3.juggler.visible) { // 공 셋이 내 쪽에서 보이는 면으로 돈다. 멈춘 공은 그 자리에 남는다
     const j = W3.juggler.position, dx = camera.position.x - j.x, dz = camera.position.z - j.z, n = Math.hypot(dx, dz) || 1;
     W3.balls.forEach((b, i) => { b.visible = true; if (W3.ballFreeze && i === 0) return; const ph = now / 350 + i * 2.09;
       b.position.set(j.x - dz / n * Math.cos(ph) * 0.3 + dx / n * 0.15, 1.75 + Math.abs(Math.sin(ph)) * 0.55, j.z + dx / n * Math.cos(ph) * 0.3 + dz / n * 0.15); });
   } else W3.balls.forEach((b) => (b.visible = false));
-  if (W3.chaseOn && now > W3.nextLaugh) { W3.nextLaugh = now + 6000 + Math.random() * 3000; W3.bob = now; crowdLaugh(); }
-  const lift = now - W3.bob < 800 ? Math.abs(Math.sin((now - W3.bob) / 800 * Math.PI * 4)) * 0.06 : 0;
-  W3.audience.concat(W3.extras).forEach((m) => { m.position.y = m.userData.baseY + lift; m.lookAt(camera.position.x, m.position.y, camera.position.z); });
-  // 단장: 안 볼 때만 다가온다
-  const D = W3.dan;
-  if (D.active) {
-    W3.danMesh.position.set(D.x, 1.3, D.z); W3.danMesh.lookAt(camera.position.x, 1.3, camera.position.z);
-    if (!W3.auto && box.hidden && now > D.grace && !danSeen() && now - D.lastMove > 1100) {
-      const dx = W3.x - D.x, dz = W3.z - D.z, d = Math.hypot(dx, dz), s = Math.min(0.6, d);
-      D.x += dx / d * s; D.z += dz / d * s; D.lastMove = now; setPannerPos(D.panner, D.x, 0.2, D.z); stepAt(D.panner, 0.9);
-      if (Math.random() < 0.5) flicker3();
-    }
-    if (!W3.auto && Math.hypot(W3.x - D.x, W3.z - D.z) < 0.9) { circusHooks.caught(); }
-  } else if (W3.danMesh.visible) W3.danMesh.lookAt(camera.position.x, 1.3, camera.position.z);
-  // 비상구 표지가 걸린 틈에 닿았는지
-  const ea = EXITS[W3.exitIdx];
-  if (!W3.auto && box.hidden && D.active && Math.hypot(W3.x - Math.cos(ea) * R_FLOOR, W3.z - Math.sin(ea) * R_FLOOR) < 1.3) circusHooks.reachedExit();
+  if (W3.danMesh.visible) {
+    if (W3.dan.mode !== "off") W3.danMesh.position.set(W3.dan.x, 1.3, W3.dan.z);
+    W3.danMesh.lookAt(camera.position.x, 1.3, camera.position.z);
+  }
   renderer.render(scene3, camera);
   requestAnimationFrame(frame3);
 }
-/** 무대 한가운데에서 다시 시작 (잡혔을 때). 잡힐수록 무대 위에 얼굴 없는 사람이 늘어 서 있다. */
-function resetCircus() {
-  W3.x = 0; W3.z = 2; W3.yaw = 0; W3.pitch = 0; W3.seoa = { x: 0.8, z: 3 };
-  Object.assign(W3.dan, { x: Math.cos(EXITS[4]) * 7.5, z: Math.sin(EXITS[4]) * 7.5, active: true, grace: performance.now() + 2500, lastMove: 0 });
-  W3.exitShifts = 0; placeSign(1);
-  for (let i = W3.extras.length; i < W3.breaks; i++) {
-    const a = i * 2.1 + 0.7, tex = canvasTex(16, 40, (g) => { g.fillStyle = "#16110f"; g.fillRect(5, 0, 6, 3); g.fillStyle = "#d8cdbd"; g.fillRect(5, 2, 6, 7); g.fillStyle = "#d8dccf"; g.fillRect(3, 9, 10, 15); g.fillStyle = "#4d6b9a"; g.fillRect(4, 24, 3, 15); g.fillRect(9, 24, 3, 15); });
-    W3.extras.push(addBillboard(tex, 0.55, 1.8, Math.cos(a) * 4.5, 0.9, Math.sin(a) * 4.5));
-  }
-}
-/** 서 있는 사람 그림 (셔츠 색만 다르게). */
-function standTex(shirt) {
-  return canvasTex(16, 40, (g) => { g.fillStyle = "#16110f"; g.fillRect(5, 0, 6, 3); g.fillStyle = "#d8cdbd"; g.fillRect(5, 2, 6, 7); g.fillStyle = "#111"; g.fillRect(6, 5, 1, 1); g.fillRect(9, 5, 1, 1);
-    g.fillStyle = shirt; g.fillRect(3, 9, 10, 15); g.fillStyle = "#2a2a3a"; g.fillRect(4, 24, 3, 15); g.fillRect(9, 24, 3, 15); });
-}
-/** 걷는 그림: from→to로 ms 동안 옮긴다 (높이 y0→y1). */
-async function walkBill(m, from, to, ms, y0, y1) {
-  const n = Math.max(1, Math.round(ms / 60));
-  for (let k = 0; k <= n; k++) {
-    const p = k / n; m.position.x = from.x + (to.x - from.x) * p; m.position.z = from.z + (to.z - from.z) * p;
-    m.userData.baseY = y0 + (y1 - y0) * p; m.position.y = m.userData.baseY;
-    if (k % 8 === 0) burst(500, 0.05, 0.04); await wait(60);
-  }
-}
+
+/* ---------- 천막 공연에 쓰는 것들 ---------- */
 /** 박수: sec초 동안 짧은 잡음이 흩어져 난다. */
 function clap(sec) { for (let i = 0; i < sec * 28; i++) setTimeout(() => burst(1600 + Math.random() * 1600, 0.03, 0.04 + Math.random() * 0.05), Math.random() * sec * 1000); }
 /** 객석 조명 밝기. 깜빡임이 끝나면 이 밝기로 돌아온다. */
 function house(v) { W3.house = v; W3.lights.forEach((l) => (l.intensity = v)); }
-/** 북 소리 연타 (마술 직전). */
-async function drumroll(ms) { for (let t = 0; t < ms; t += 80) { burst(110, 0.07, 0.18); await wait(80); } burst(90, 0.5, 0.35); }
-/** 천장에서 내리꽂는 조명을 p에 맞춘다. null이면 끈다. */
-function spotAt(p) {
-  if (!p) { W3.spot.visible = false; return; }
-  W3.spot.visible = true; W3.spot.position.set(0, 9, 0); W3.spot.lookAt(p.x, p.y, p.z + 0.01);
-  W3.spot.scale.z = Math.hypot(p.x, 9 - p.y, p.z);
-}
-/** 조명을 a에서 b로 ms 동안 훑는다. */
-async function sweepSpot(a, b, ms) { const n = Math.round(ms / 40); for (let k = 0; k <= n; k++) { const t = k / n; spotAt({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }); await wait(40); } }
 /** 시선을 m 쪽으로 ms 동안 돌려 둔다. */
 async function lookAtFor(m, ms) { W3.cut = true; W3.lookTarget = m; await wait(ms); W3.lookTarget = null; W3.cut = false; }
-/** 공연: 익숙해지기 → 이변 → 위협이 드러남. 설명은 하지 않고 보여 주기만 한다. */
+/** 서커스 행진곡 (네모파 멜로디 + 쿵짝). rate가 커지면 느려지고, pitch로 음이 틀어진다. */
+function startMarch() {
+  const mel = [67, 72, 76, 72, 67, 72, 76, 79, 77, 74, 71, 74, 67, 71, 74, 79], bass = [48, 55, 48, 55, 50, 55, 43, 55];
+  const g = ac.createGain(); g.gain.value = 0.022; g.connect(master);
+  const M = { rate: 1, pitch: 0, alive: true, i: 0, stop() { M.alive = false; } };
+  const note = (m, len, type, vol) => { const t = ac.currentTime, o = ac.createOscillator(), e = ac.createGain(); o.type = type; o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+    e.gain.setValueAtTime(vol, t); e.gain.exponentialRampToValueAtTime(0.001, t + len); o.connect(e); e.connect(g); o.start(t); o.stop(t + len + 0.05); };
+  const play = () => { if (!M.alive) return; const i = M.i++;
+    note(mel[i % 16] + M.pitch, 0.2 * M.rate, "square", 0.5); if (i % 2 === 0) note(bass[(i / 2) % 8] + M.pitch, 0.25 * M.rate, "triangle", 0.9);
+    setTimeout(play, 250 * M.rate); };
+  play(); return M;
+}
+/** 공연: 익숙해지기 → 기괴하게 바뀜 → 천막이 무너지고 위협이 나에게 닿음. */
 async function circusShow() {
-  const a0 = EXITS[0], dan = W3.danMesh, seat = W3.emptySeat, L = W3.leaver;
-  const side = { x: -Math.sin(a0) * 2.2, z: Math.cos(a0) * 2.2 };   // 무대 가운데에서 옆으로 비켜선 자리
-  const front = { x: Math.cos(a0) * 0.9, z: Math.sin(a0) * 0.9 };   // 상자 앞 (내 쪽)
-  const at = (x, y, z) => ({ position: new THREE.Vector3(x, y, z) });
-  W3.cabinet.lookAt(Math.cos(a0) * 7, 0, Math.sin(a0) * 7);
+  const dan = W3.danMesh, side = { x: -Math.sin(W3.mySeat.a) * 2.2, z: Math.cos(W3.mySeat.a) * 2.2 };
   vn.face = "calm"; await say(S, "……여기, 서커스야?");
-  await say(S, "여기 서서 잠깐만 보자.");
+  await say(S, "앉아 있으면 괜찮겠지. 잠깐만 보자.");
   box.hidden = true; W3.cut = false;
   hint("화면을 끌면 둘러보기 (←→ 키도 돼)", 8000);
-  await wait(5000);
-  // 1. 익숙해지기: 평범한 공연
+  await wait(4500);
+  // 1. 익숙해지기
   house(0.35); burst(90, 0.6, 0.3); await wait(1200);
-  await say("단장", "자리에 앉아 주세요. 공연이 곧 시작합니다.", { pitch: 220 }); box.hidden = true; await wait(1500); // 안내 방송: 아직 모습은 없다
+  await say("단장", "자리에 앉아 주세요. 공연이 곧 시작합니다.", { pitch: 220 }); box.hidden = true; await wait(1200);
+  const march = startMarch(); W3.march = march;
   dan.position.set(0, 1.3, 0); dan.visible = true; clap(2);
-  await lookAtFor(dan, 1600);
+  await lookAtFor(dan, 1500);
   await say("단장", "오늘도 와 주셔서 감사합니다.", { pitch: 220 }); box.hidden = true; clap(2.5);
-  dan.position.set(side.x, 1.3, side.z); await wait(1200);
-  await say("단장", "첫 순서입니다.", { pitch: 220 }); box.hidden = true;
-  W3.juggler.visible = true; await wait(6500); clap(2);
+  dan.position.set(side.x, 1.3, side.z); await wait(1000);
+  W3.juggler.visible = true; await wait(6000); clap(2);
   vn.face = "smile"; await say(S, "생각보다 진짜 서커스 같네.");
   await say(S, "어릴 때 이런 거 본 적 있어?");
   const c = await choose(["있어. 동네 공터에 천막이 왔었어.", "아니. 처음 봐."]);
   vn.face = "calm"; await say(S, c === 0 ? "나도. 솜사탕 냄새 났던 것만 기억나." : "그럼 오늘이 처음이네.");
-  box.hidden = true; await wait(2500); clap(2); W3.juggler.visible = false; await wait(1500);
-  // 2. 이변 ① 웃음이 먼저 온다
-  W3.clown.visible = true; await wait(3500);
+  box.hidden = true; await wait(2000); clap(2); W3.juggler.visible = false; await wait(1200);
+  // 2. 기괴하게 바뀜 ① 웃음이 먼저 오고, 음악이 늘어진다
+  W3.clown.visible = true; await wait(3000);
   crowdLaugh(); W3.bob = performance.now(); await wait(1000);
   W3.clown.material.map = W3.clownDownTex; W3.clown.material.needsUpdate = true; W3.clown.scale.set(1.8 / 0.55, 0.55 / 1.8, 1); W3.clown.position.y = 0.28;
-  burst(160, 0.3, 0.3); await wait(2800); W3.clown.visible = false; await wait(1200);
-  // ② 같은 순서가 같은 말로 다시. 공 하나가 허공에 멈춰도 박수는 그대로
-  await say("단장", "첫 순서입니다.", { pitch: 220 }); box.hidden = true;
-  W3.juggler.visible = true; await wait(3000);
-  W3.ballFreeze = true; await wait(5000); clap(2);
+  burst(160, 0.3, 0.3); march.rate = 1.5; march.pitch = -1; await wait(3500);
+  // 광대가 누운 채로 고개만 나를 따라온다 (일어나지 않는다)
+  await lookAtFor(W3.clown, 2500); W3.clown.visible = false; await wait(800);
+  // ② 같은 순서가 다시. 공 하나가 허공에 멈춰도 박수는 그대로
+  W3.juggler.visible = true; await wait(2500);
+  W3.ballFreeze = true; march.rate = 2.1; march.pitch = -3; await wait(4500); clap(2);
   vn.face = "worry"; await say(S, "……이거, 아까 그거 아니야?"); box.hidden = true;
-  await wait(1500);
-  // ③ 옆 사람이 혼자 웃음을 멈추지 않는다
+  // ③ 바로 옆자리 사람이 얼굴 없이 혼자 웃는다. 음악이 뚝 끊긴다
+  march.stop(); W3.juggler.visible = false; W3.ballFreeze = false;
   W3.neighbor.material.map = W3.blankTex; W3.neighbor.material.needsUpdate = true;
   W3.cut = true; W3.lookTarget = W3.neighbor;
-  for (let i = 0; i < 8; i++) { laugh(0.045); await wait(430); }
-  W3.lookTarget = null; W3.cut = false;
-  W3.juggler.visible = false; W3.ballFreeze = false;
-  await wait(1800); clap(2.5); await wait(1500);
-  // ④ 단장이 같은 말을 되풀이한다
-  await lookAtFor(dan, 1400); flicker3();
+  for (let i = 0; i < 9; i++) { laugh(0.05); await wait(420); }
+  W3.lookTarget = null; W3.cut = false; await wait(1500);
+  // ④ 단장이 인사를 되풀이하다 끊긴다
+  await lookAtFor(dan, 1300); flicker3();
   await say("단장", "오늘도 와 주셔서 감사합니다. 오늘도 와 주셔서 감사합니다. 오늘도 와 주셔서", { pitch: 220 }); flicker3(); box.hidden = true;
-  await wait(900);
-  vn.face = "worry"; await say(S, "……좀 이상하지 않아?"); box.hidden = true;
-  // 3. 위협이 드러남: 관객 참여. 불려 나간 사람은 돌아오지 않는다
-  W3.cabinet.visible = true; burst(90, 0.6, 0.3); await wait(800);
-  await say("단장", "관객 한 분을 모시겠습니다.", { pitch: 220 }); box.hidden = true;
-  const far = { x: Math.cos(4.4) * 9.9, y: 1.4, z: Math.sin(4.4) * 9.9 }, seatP = { x: seat.x, y: seat.y, z: seat.z };
-  W3.cut = true; W3.lookTarget = L;
-  await sweepSpot(far, seatP, 3200); clap(2); await wait(1200);
-  L.material.map = standTex("#7a5a4a"); L.material.needsUpdate = true; L.scale.set(0.92, 2, 1); burst(300, 0.2, 0.1);
-  const follow = setInterval(() => spotAt({ x: L.position.x, y: 0, z: L.position.z }), 40);
-  await walkBill(L, seat, front, 4200, seat.y + 0.45, 0.9);
-  await walkBill(L, front, { x: 0, z: 0 }, 700, 0.9, 0.9);
-  clearInterval(follow); spotAt({ x: 0.3, y: 0, z: 0.3 });
-  W3.lookTarget = W3.cabinet; W3.door.visible = true; burst(200, 0.2, 0.2);
-  await drumroll(1800); L.visible = false; W3.door.visible = false; clap(3); await wait(2600);
-  W3.door.visible = true; burst(200, 0.2, 0.2); await drumroll(1800); W3.door.visible = false; await wait(1400);
-  crowdLaugh(); W3.bob = performance.now(); await wait(700); crowdLaugh(); await wait(1200);
-  W3.lookTarget = at(seat.x, seat.y, seat.z); await sweepSpot({ x: 0.3, y: 0, z: 0.3 }, seatP, 1800); await wait(2600);
-  await sweepSpot(seatP, { x: W3.x, y: 0, z: W3.z }, 1800); W3.lookTarget = dan; await wait(1500);
-  await say("단장", "다음 분.", { pitch: 220 }); box.hidden = true; await wait(700);
-  vn.face = "worry"; await say(S, "……나가자. 저기, 비상구.");
-  box.hidden = true; spotAt(null); house(0.6); W3.lookTarget = W3.sign; await wait(1600); W3.lookTarget = null; W3.cut = false;
+  // ⑤ 객석 전체가 한꺼번에 일어선다. 소리 없이
+  await wait(700);
+  const shirts = ["#5a6a8a", "#7a5a4a", "#3a5a4a", "#8a8a7a", "#6a3a3a", "#4a4a5a"];
+  W3.audience.forEach((m) => { m.material.map = standTex(shirts[m.userData.seed % 6], m === W3.neighbor); m.material.needsUpdate = true; m.scale.set(0.92, 2, 1); m.userData.baseY += 0.45; });
+  burst(70, 0.5, 0.4); await wait(2200);
+  vn.face = "worry"; await say(S, "……가자. 지금."); box.hidden = true;
+  // 3. 천막이 무너진다: 벽과 지붕이 땅으로 꺼지고, 밖은 끝없는 사무실 천장
+  W3.outside.visible = true; W3.shake = true; scene3.fog.far = 34;
+  const rumble = setInterval(() => burst(60 + Math.random() * 40, 0.4, 0.3), 160);
+  for (let k = 0; k <= 50; k++) { W3.tent.forEach((m) => (m.position.y = m.userData.y0 - k / 50 * 14)); W3.tubes.forEach((m) => (m.position.y = 5.2 - k / 50 * 6)); await wait(60); }
+  clearInterval(rumble); W3.shake = false;
+  const back = startMarch(); back.rate = 2.6; back.pitch = -7; W3.march = back; // 늘어지고 낮아진 행진곡이 다시
+  await wait(2500);
+  // 위협이 나에게 닿는다: 불이 꺼졌다 켜지면 단장이 바로 앞에
+  house(0); W3.tubes.forEach((m) => m.material.color.setHex(0x111a16)); await wait(900);
+  const toC = Math.hypot(W3.x, W3.z); dan.position.set(W3.x - W3.x / toC * 1.1, 1.3, W3.z - W3.z / toC * 1.1);
+  house(0.5); W3.tubes.forEach((m) => m.material.color.setHex(0xdfffe8)); W3.yaw = Math.atan2(W3.x, W3.z); W3.pitch = 0.25;
+  stinger(); W3.shake = true; try { navigator.vibrate && navigator.vibrate(300); } catch (e) {}
+  await say("단장", "자리에서 일어나시면 안 됩니다.", { pitch: 200 }); W3.shake = false;
+  await say("", "(서아가 내 손목을 잡아끈다.)");
+  vn.face = "worry"; await say(S, "뛰어!");
+  box.hidden = true; back.stop();
 }
-/** 계단 4: 천막 안. 비상구는 두 번 옮겨 가고, 세 번째에 서아가 손을 내민다. */
+/** 복도 추격을 처음 상태로 (시작할 때, 잡혔을 때). */
+function resetBack() {
+  W3.phase = "back"; W3.watch = false; W3.eyeY = 1.55; W3.seoaFixed = false;
+  W3.x = cw(1); W3.z = cz(8); W3.yaw = 0; W3.pitch = 0; W3.trail = [];
+  W3.seoa = { x: cw(1), z: cz(7) }; W3.si = 1;
+  Object.values(W3.doors).forEach((d) => { d.open = false; d.t = 0; d.locked = false; d.mesh.position.y = 1.5; });
+  Object.assign(W3.dan, { mode: "start", t: performance.now() + 4000, x: cw(1), z: cz(9) }); W3.danMesh.visible = false;
+  W3.aheadDone = false; W3.slamDone = false;
+  scene3.fog.near = 1.5; scene3.fog.far = 13; W3.lamp.intensity = 0.9; house(0.4);
+}
+/** 계단 4: 천막에서 관람 → 무대 뒤로 도망 → 비상구에서 서아가 손을 내민다. */
 function stair4Circus() {
   return new Promise((resolve) => {
     vn.scene = "black"; $("vn").hidden = true; box.hidden = true;
     if (!renderer) buildCircus();
     $("world").hidden = false; resize3D();
     const buzz = startBuzz();
-    W3.ended = false; W3.last = 0; W3.nextLaugh = performance.now() + 3500;
-    W3.dan.active = false; placeSign(2);
-    W3.x = Math.cos(EXITS[0]) * 7.2; W3.z = Math.sin(EXITS[0]) * 7.2; W3.yaw = Math.atan2(W3.x, W3.z); W3.seoa = { x: W3.x * 1.08, z: W3.z * 1.08 }; // 들어온 틈 앞에 서서 본다
+    W3.ended = false; W3.last = 0; W3.phase = "tent"; W3.watch = true; W3.eyeY = 1.25; W3.dan.mode = "off";
+    const ms = W3.mySeat; W3.x = ms.x; W3.z = ms.z; W3.yaw = Math.atan2(ms.x, ms.z); W3.pitch = 0;
+    W3.seoaFixed = true; W3.seoa = { x: W3.seoaSeat.x, z: W3.seoaSeat.z };
     requestAnimationFrame(frame3);
     const busy = (f) => { if (W3.busy) return; W3.busy = true; f().finally(() => { W3.busy = false; box.hidden = true; vn.big = false; }); };
     circusHooks = {
-      grab: () => busy(async () => {
-        W3.x *= 0.85; W3.z *= 0.85;
-        await say("", "(객석에 올라가려는데, 서아가 내 소매를 잡는다.)");
-        vn.face = "worry"; await say(S, "……앉지 말자. 나가자.");
-      }),
+      // 복도에서 정해진 순간들: 앞길에 단장, 문이 등 뒤에서 닫힘, 비상구 도착
+      backTick: (now) => {
+        const cx = Math.floor((W3.x - BX) / BC), cy = Math.floor(W3.z / BC), D = W3.dan;
+        if (!W3.aheadDone && cy === 7 && cx >= 5) { // 오른쪽 끝에서 단장이 걸어 나온다. 위쪽 문으로 꺾어야 한다
+          W3.aheadDone = true; Object.assign(D, { mode: "ahead", x: cw(14), z: cz(7) }); W3.danMesh.visible = true;
+          flicker3(); burst(200, 0.4, 0.3); stinger();
+        }
+        if (W3.aheadDone && !W3.slamDone && cy <= 5 && cx === 9) { // 지나온 문이 닫히고, 잠시 뒤 부서지듯 열린다
+          W3.slamDone = true; const door = W3.doors["9,6"]; door.open = false; door.locked = true; burst(120, 0.4, 0.4);
+          D.mode = "wait"; W3.danMesh.visible = false;
+          setTimeout(() => { burst(90, 0.3, 0.4); }, 1200); setTimeout(() => { burst(90, 0.3, 0.45); }, 2000);
+          setTimeout(() => {
+            if (W3.phase !== "back" || D.mode !== "wait") return;
+            door.open = true; burst(70, 0.6, 0.5); flicker3();
+            let ti = 0, best = 1e9; W3.trail.forEach((p, i) => { const d = Math.hypot(p.x - door.x, p.z - door.z); if (d < best) { best = d; ti = i; } });
+            Object.assign(D, { mode: "trail", ti, x: door.x, z: door.z }); W3.danMesh.visible = true;
+          }, 2800);
+        }
+        const ex = W3.doors["1,1"];
+        if (Math.hypot(W3.x - ex.x, W3.z - ex.z) < 2.3) circusHooks.reachedExit();
+      },
       caught: () => busy(async () => {
-        W3.dan.active = false; stinger(); try { navigator.vibrate && navigator.vibrate(250); } catch (e) {}
+        W3.dan.mode = "off"; stinger(); try { navigator.vibrate && navigator.vibrate(250); } catch (e) {}
         W3.ended = true; $("world").hidden = true; await wait(1600);
-        W3.breaks++; resetCircus(); $("world").hidden = false; W3.ended = false; W3.last = 0; requestAnimationFrame(frame3);
+        resetBack(); $("world").hidden = false; W3.ended = false; W3.last = 0; requestAnimationFrame(frame3);
       }),
       reachedExit: () => busy(async () => {
-        if (W3.exitShifts < 2) {
-          W3.exitShifts++; burst(200, 0.4, 0.2); flicker3();
-          let n; do { n = Math.floor(Math.random() * 6); } while (n === W3.exitIdx);
-          placeSign(n);
-          await say("", W3.exitShifts === 1 ? "(표지 아래는 막혀 있다. 고개를 드니 비상구 표지가 저쪽 틈에 걸려 있다.)" : "(또 막혀 있다. 표지가 또 옮겨 가 있다.)");
-          if (W3.exitShifts === 1) { vn.face = "worry"; await say(S, "저거, 아까부터 저기 있었어?"); }
-          return;
-        }
         // 서아의 배신 (장치 8: 이 게임에서 단 한 번)
-        W3.dan.active = false; W3.danMesh.visible = true;
+        W3.dan.mode = "off"; W3.cut = true;
+        W3.lookTarget = W3.seoaMesh; await wait(900); W3.lookTarget = null;
         vn.face = "worry"; await say(S, "이쪽! 나 따라와.");
         await fakeChoice(["따라간다.", "따라가지 않는다."], 0);
-        box.hidden = true; vn.big = false; W3.seoaFixed = true;
-        const seat = W3.emptySeat;
-        await new Promise((done) => { W3.auto = { t0: performance.now(), ms: 3200, from: { x: W3.x, z: W3.z }, to: { x: seat.x, z: seat.z, y: seat.y + 0.9 }, yaw: Math.atan2(seat.x, seat.z), y: 1.55, done }; W3.seoa = { x: seat.x * 0.85, z: seat.z * 0.85 }; });
-        burst(160, 0.3, 0.25); await wait(600); crowdLaugh(); W3.bob = performance.now();
-        await wait(1400);
+        box.hidden = true; vn.big = false;
+        const ex = W3.doors["1,1"]; ex.open = true; burst(260, 0.3, 0.2);
+        await new Promise((done) => { W3.auto = { t0: performance.now(), ms: 1600, from: { x: W3.x, z: W3.z }, to: { x: ex.x - 0.6, z: ex.z }, yaw: Math.PI / 2, done }; });
+        // 문 너머는 처음 그 천막, 내 자리
+        $("world").hidden = true; await wait(1200);
+        W3.auto = null; W3.phase = "tent"; W3.watch = true; W3.eyeY = 1.25; W3.danMesh.visible = false; W3.lamp.intensity = 0;
+        W3.tent.forEach((m) => (m.position.y = m.userData.y0)); W3.tubes.forEach((m) => { m.position.y = 5.2; m.material.color.setHex(0xdfffe8); }); W3.outside.visible = false;
+        scene3.fog.near = 3; scene3.fog.far = 22; house(0.35);
+        W3.audience.forEach((m) => { m.material.map = audienceTex(m.userData.seed, m === W3.neighbor); m.material.needsUpdate = true; m.scale.set(1, 1, 1); m.userData.baseY = m.position.y = m.userData.baseY - 0.45; });
+        const ms2 = W3.mySeat; W3.x = ms2.x; W3.z = ms2.z; W3.yaw = Math.atan2(ms2.x, ms2.z); W3.pitch = 0;
+        W3.seoaFixed = true; W3.seoa = { x: W3.seoaSeat.x, z: W3.seoaSeat.z };
+        W3.seoaMesh.material.map = W3.seoaTex.calm; W3.seoaMesh.material.needsUpdate = true;
+        $("world").hidden = false; await wait(1600);
+        crowdLaugh(); W3.bob = performance.now(); await wait(1200);
+        W3.lookTarget = W3.seoaMesh; await wait(1500);
         W3.seoaMesh.material.map = W3.seoaTex.wrong; W3.seoaMesh.material.needsUpdate = true;
         vn.face = "wrong"; await say(S, "자리에 앉아 주세요. 공연이 곧 시작합니다.", { speed: 70 });
         W3.ended = true; buzz.stop(); $("world").hidden = true; box.hidden = true; vn.big = false;
         await wait(1800); resolve();
       }),
     };
-    W3.cut = true; W3.watch = true; W3.chaseOn = false;
+    W3.cut = true;
     busy(async () => {
       await circusShow();
-      W3.watch = false; W3.chaseOn = true; W3.nextLaugh = performance.now() + 6000;
-      hint("WASD·방향키로 걷기, 끌어서 둘러보기\n폰: 왼쪽 아래를 누른 채 밀면 걷기", 9000);
-      const p = W3.danMesh.position;
-      Object.assign(W3.dan, { x: p.x, z: p.z, active: true, grace: performance.now() + 4000, lastMove: 0 });
+      $("world").hidden = true; await wait(900);
+      resetBack(); $("world").hidden = false;
+      hint("서아를 따라 뛰어\nWASD·방향키로 걷기, 끌어서 둘러보기\n폰: 왼쪽 아래를 누른 채 밀기", 9000);
     });
   });
 }
