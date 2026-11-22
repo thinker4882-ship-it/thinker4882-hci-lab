@@ -602,7 +602,7 @@ function draw2D(t) {
   if (W2.farFig && !W2.dark) people.push({ x: W2.farFig.x, y: W2.farFig.y, tall: true });
   people.sort((a, b) => a.y - b.y).forEach((p) => p.tall ? drawTall(p.x, p.y) : drawPerson(p.x, p.y, p.o));
   if (W2.dark || W2.flick) { vx.fillStyle = W2.dark ? "rgba(0,0,0,0.9)" : "rgba(0,0,0,0.5)"; vx.fillRect(0, 0, 135, 240); }
-  if (W2.catchFig) drawTall(W2.catchFig.x, W2.catchFig.y);
+  if (W2.catchFig) drawPerson(W2.catchFig.x, W2.catchFig.y, { body: "#d8dccf", hair: "#16110f", face: "down", blank: true }); // 복도에서 잡는 건 단장이 아니라 얼굴 없는 흰 셔츠
 }
 /** 단장: 키 큰 검은 형체, 얼굴 자리만 희다. */
 function drawTall(x, y) {
@@ -955,7 +955,7 @@ function buildCircus() {
     if (nearExit(a)) continue;
     const b = add(new THREE.BoxGeometry(1.8, h, 0.85), seatMat, Math.cos(a) * rad, h / 2, Math.sin(a) * rad); b.rotation.y = -a + Math.PI / 2;
     const pos = { x: Math.cos(a) * (rad - 0.1), y: h + 0.45, z: Math.sin(a) * (rad - 0.1), a };
-    if (tier === 1 && !W3.emptySeat && a > 2.2) { W3.emptySeat = pos; continue; } // 비어 있는 자리 하나
+    if (tier === 1 && !W3.emptySeat && a > 2.2) { W3.emptySeat = pos; W3.leaver = addBillboard(audienceTex(999), 0.6, 0.9, pos.x, pos.y, pos.z); W3.audience.push(W3.leaver); continue; } // 나중에 비게 될 자리
     if (r() < 0.55 || (tier === 0 && i === 3)) W3.audience.push(addBillboard(audienceTex(tier * 31 + i, tier === 0 && i === 3), 0.6, 0.9, pos.x, pos.y, pos.z));
   }
   // 천막 틈마다 어두운 입구, 그중 하나에만 초록 비상구 표지
@@ -989,7 +989,7 @@ window.addEventListener("resize", resize3D);
 function bind3D() {
   const cv = $("gl"), stick = $("stick");
   cv.addEventListener("pointerdown", (e) => {
-    if (W3.ended || W3.auto || !box.hidden) return;
+    if (W3.ended || W3.auto || W3.cut || !box.hidden) return;
     const r = cv.getBoundingClientRect(), lx = (e.clientX - r.left) / r.width, ly = (e.clientY - r.top) / r.height;
     cv.setPointerCapture(e.pointerId);
     if (lx < 0.5 && ly > 0.55) { W3.joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 }; stick.hidden = false; stick.style.left = e.clientX - $("app").getBoundingClientRect().left + "px"; stick.style.top = e.clientY - $("app").getBoundingClientRect().top + "px"; }
@@ -1030,7 +1030,7 @@ function frame3(now) {
     W3.x = a.from.x + (a.to.x - a.from.x) * p; W3.z = a.from.z + (a.to.z - a.from.z) * p; a.y = 1.55 + (a.to.y - 1.55) * p;
     W3.yaw += (a.yaw - W3.yaw) * 0.05; W3.pitch *= 0.95;
     if (p >= 1 && a.done) { const d = a.done; a.done = null; d(); }
-  } else if (box.hidden) {
+  } else if (box.hidden && !W3.cut) {
     let fwd = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0), side = (k.d ? 1 : 0) - (k.a ? 1 : 0);
     if (k.arrowleft) W3.yaw += 1.8 * dt; if (k.arrowright) W3.yaw -= 1.8 * dt;
     if (W3.joy) { fwd = -W3.joy.dy; side = W3.joy.dx; }
@@ -1041,6 +1041,13 @@ function frame3(now) {
       W3.stepAcc = (W3.stepAcc || 0) + dt; if (W3.stepAcc > 0.45) { W3.stepAcc = 0; burst(500, 0.05, 0.06); }
     }
   }
+  // 연출 중엔 시선을 대상 쪽으로 천천히 돌린다
+  if (W3.lookTarget) { const p = W3.lookTarget.position; let d = Math.atan2(-(p.x - W3.x), -(p.z - W3.z)) - W3.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); W3.yaw += d * 0.06; W3.pitch *= 0.9; }
+  // 객석으로 올라가려 하면(비상구가 아닌 가장자리를 계속 밀면) 한 번, 서아가 말린다
+  const e0 = EXITS[W3.exitIdx];
+  if (W3.dan.active && !W3.grabbed && box.hidden && Math.hypot(W3.x, W3.z) > R_FLOOR - 0.3 && Math.hypot(W3.x - Math.cos(e0) * R_FLOOR, W3.z - Math.sin(e0) * R_FLOOR) > 2.5) {
+    W3.edgeT = (W3.edgeT || 0) + dt; if (W3.edgeT > 0.6) { W3.grabbed = true; circusHooks.grab(); }
+  } else W3.edgeT = 0;
   camera.position.set(W3.x, W3.auto ? W3.auto.y : 1.55, W3.z); camera.rotation.y = W3.yaw; camera.rotation.x = W3.pitch;
   setListener(W3.x, 1.55, W3.z, W3.yaw);
   // 서아 그림이 왼쪽 뒤에서 따라온다
@@ -1077,6 +1084,31 @@ function resetCircus() {
     W3.extras.push(addBillboard(tex, 0.55, 1.8, Math.cos(a) * 4.5, 0.9, Math.sin(a) * 4.5));
   }
 }
+/** 서 있는 사람 그림 (셔츠 색만 다르게). */
+function standTex(shirt) {
+  return canvasTex(16, 40, (g) => { g.fillStyle = "#16110f"; g.fillRect(5, 0, 6, 3); g.fillStyle = "#d8cdbd"; g.fillRect(5, 2, 6, 7); g.fillStyle = "#111"; g.fillRect(6, 5, 1, 1); g.fillRect(9, 5, 1, 1);
+    g.fillStyle = shirt; g.fillRect(3, 9, 10, 15); g.fillStyle = "#2a2a3a"; g.fillRect(4, 24, 3, 15); g.fillRect(9, 24, 3, 15); });
+}
+/** 단장이 위험하다는 걸 먼저 보여 준다: 관객 하나가 일어나 틈으로 나가려다, 불이 깜빡이는 사이 사라진다. 설명은 없다. */
+async function takenDemo() {
+  const m = W3.leaver, seat = W3.emptySeat;
+  const e = EXITS.reduce((b, x) => (Math.abs(Math.atan2(Math.sin(x - seat.a), Math.cos(x - seat.a))) < Math.abs(Math.atan2(Math.sin(b - seat.a), Math.cos(b - seat.a))) ? x : b));
+  const to = { x: Math.cos(e) * 10, z: Math.sin(e) * 10 };
+  W3.lookTarget = m; await wait(1600);
+  m.material.map = standTex("#7a5a4a"); m.material.needsUpdate = true; m.scale.set(0.92, 2, 1); burst(300, 0.2, 0.1);
+  for (let k = 0; k <= 40; k++) {
+    const p = k / 40; m.position.x = seat.x + (to.x - seat.x) * p; m.position.z = seat.z + (to.z - seat.z) * p; m.userData.baseY = seat.y + 0.45 + (0.9 - seat.y - 0.45) * p;
+    if (k % 8 === 0) burst(500, 0.05, 0.04); await wait(60);
+  }
+  flicker3(); W3.danMesh.position.set(Math.cos(e) * 10.9, 1.3, Math.sin(e) * 10.9); W3.danMesh.lookAt(W3.x, 1.3, W3.z);
+  setPannerPos(W3.dan.panner, Math.cos(e) * 10.9, 0.2, Math.sin(e) * 10.9); stepAt(W3.dan.panner, 0.9);
+  await wait(1000);
+  W3.lights.forEach((l) => (l.intensity = 0)); W3.tubes.forEach((t) => t.material.color.setHex(0x111a16));
+  await wait(600); m.visible = false;
+  W3.lights.forEach((l) => (l.intensity = 0.8)); W3.tubes.forEach((t) => t.material.color.setHex(0xdfffe8));
+  burst(120, 0.5, 0.25); await wait(900);
+  crowdLaugh(); W3.bob = performance.now(); W3.lookTarget = W3.danMesh; await wait(1500);
+}
 /** 계단 4: 천막 안. 비상구는 두 번 옮겨 가고, 세 번째에 서아가 손을 내민다. */
 function stair4Circus() {
   return new Promise((resolve) => {
@@ -1089,6 +1121,11 @@ function stair4Circus() {
     requestAnimationFrame(frame3);
     const busy = (f) => { if (W3.busy) return; W3.busy = true; f().finally(() => { W3.busy = false; box.hidden = true; vn.big = false; }); };
     circusHooks = {
+      grab: () => busy(async () => {
+        W3.x *= 0.85; W3.z *= 0.85;
+        await say("", "(객석에 올라가려는데, 서아가 내 소매를 잡는다.)");
+        vn.face = "worry"; await say(S, "……앉지 말자. 나가자.");
+      }),
       caught: () => busy(async () => {
         W3.dan.active = false; stinger(); try { navigator.vibrate && navigator.vibrate(250); } catch (e) {}
         W3.ended = true; $("world").hidden = true; await wait(1600);
@@ -1118,14 +1155,22 @@ function stair4Circus() {
         await wait(1800); resolve();
       }),
     };
+    W3.cut = true;
     busy(async () => {
       vn.face = "worry"; await say(S, "……여기, 서커스야?");
-      hint("왼쪽 아래를 누른 채 밀면 걷기\n나머지 화면을 끌면 둘러보기", 9000);
-      await wait(4000);
-      // 단장 등장: 맞은편 틈에서
-      Object.assign(W3.dan, { x: Math.cos(EXITS[4]) * 7.5, z: Math.sin(EXITS[4]) * 7.5, active: true, grace: performance.now() + 6000, lastMove: 0 });
-      W3.danMesh.visible = true; setPannerPos(W3.dan.panner, W3.dan.x, 0.2, W3.dan.z); stepAt(W3.dan.panner, 0.9);
+      box.hidden = true; await wait(2000);
+      // 단장 등장: 맞은편 틈에서. 아직 움직이지 않는다.
+      const a4 = EXITS[4]; W3.danMesh.position.set(Math.cos(a4) * 7.5, 1.3, Math.sin(a4) * 7.5); W3.danMesh.lookAt(0, 1.3, 2); W3.danMesh.visible = true;
+      setPannerPos(W3.dan.panner, Math.cos(a4) * 7.5, 0.2, Math.sin(a4) * 7.5); stepAt(W3.dan.panner, 0.9);
+      W3.lookTarget = W3.danMesh; await wait(1800);
       await say("단장", "자리에 앉아 주세요. 공연이 곧 시작합니다.", { pitch: 220 });
+      box.hidden = true;
+      await takenDemo();
+      vn.face = "worry"; await say(S, "……나가자. 저기, 비상구.");
+      box.hidden = true; W3.lookTarget = W3.sign; await wait(1600); W3.lookTarget = null; W3.cut = false;
+      hint("왼쪽 아래를 누른 채 밀면 걷기\n나머지 화면을 끌면 둘러보기", 9000);
+      const p = W3.danMesh.position;
+      Object.assign(W3.dan, { x: p.x, z: p.z, active: true, grace: performance.now() + 5000, lastMove: 0 });
     });
   });
 }
