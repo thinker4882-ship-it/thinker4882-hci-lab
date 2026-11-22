@@ -369,6 +369,10 @@ async function stair0() {
   vn.track = false;
   await say(S, "다음은 수정교 정류장."); // 단서 1
   await say("안내 방송", "다음은 수정교, 수정교 정류장입니다.");
+  vn.flowing = false; burst(1400, 0.9, 0.1);
+  await say("", "(버스가 수정교 정류장에 선다. 아무도 타지 않는다.)");
+  burst(1400, 0.6, 0.08); vn.flowing = true;
+  await say("", "(문이 닫히고, 다시 출발한다.)");
   await say(S, "여기 지나면 금방이야.");
   await say(S, "뒤에 저분, 아까부터 계속 주무신다.");
   const c = await choose(["깨워 드릴까?", "놔두자."]);
@@ -382,6 +386,7 @@ async function stair1Bus() {
   stopEngine(); vn.flowing = false; vn.passenger = false;
   vn.face = "calm"; await say(S, "", { auto: 2400 });
   vn.face = "worry"; await say(S, "……어?");
+  await say("", "(버스가 선다. 창밖에 아까 지나온 수정교 정류장 표지판이 보인다.)");
   await say("안내 방송", "이번 정류장은 수정교, 수정교 정류장입니다.");
   await say(S, "수정교 아까 지났는데.");
   burst(1400, 0.9, 0.12); vn.lightsOn = false; // 문 열리는 쉬익 + 불 꺼짐
@@ -391,8 +396,10 @@ async function stair1Bus() {
   if (d === 1) { vn.face = "calm"; await say(S, "기사님 자리 비어 있어."); }
   vn.scene = "black"; vn.big = false;
   const rain = startRain(0.0); rain.gain.linearRampToValueAtTime(0.06, ac.currentTime + 2);
-  await say("", "(비가 온다.)");
-  await say(S, "저기 들어가서 비 좀 피하자.");
+  await say("", "(비가 온다. 정류장 옆 건물 1층에 '24시 휴게실' 불이 켜져 있다.)");
+  await say(S, "저기 들어가서 비 좀 피하자. 택시도 거기서 부르고.");
+  burst(900, 0.4, 0.08);
+  await say("", "(유리문을 밀고 들어간다.)");
   rain.gain.linearRampToValueAtTime(0.015, ac.currentTime + 1.5);
 }
 
@@ -400,7 +407,7 @@ async function stair1Bus() {
 async function stair1Room() {
   vn.scene = "room";
   const hum = startHum(), stopClock = startClock();
-  await say(S, "여기 원래 열려 있었나.");
+  await say(S, "24시라더니 아무도 없네.");
   await say(S, "택시 부를게. 잠깐만.");
   hint("둘러볼 곳을 눌러 봐");
   const seen = {}; let music = null, unlocked = false, after = 0, seoaTalk = 0;
@@ -417,7 +424,7 @@ async function stair1Room() {
       if (n === 1 && !vn.paintingFigure) await say("", "(초록 언덕 그림.)");
       else { vn.paintingFigure = true; await say("", "(언덕 위에 사람이 하나 서 있다.)"); }
     } else if (id === "door") {
-      if (!unlocked) await say("", n === 1 ? "(잠겨 있다.)" : "(잠겨 있다. 문 너머가 조용하지 않다.)");
+      if (!unlocked) await say("", music ? "(잠겨 있다. 음악은 이 너머에서 난다.)" : n === 1 ? "(건물 안쪽으로 이어지는 문. 잠겨 있다.)" : "(손잡이가 차갑다.)");
       else break;
     } else if (id === "seoa") {
       seoaTalk++;
