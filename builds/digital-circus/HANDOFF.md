@@ -125,6 +125,9 @@
 - 갈림길 결정 → `design/blueprint-v2.md` (서커스는 일상 가상세계 속 장소 하나, 형식을 오감, 3D는 일부만, 장치 1·3·4·6·7·8, 대사 A/C톤).
 - v2 첫 장면 '밤 버스'(미연시 → 3D) → `v2/night-bus.html` · 비공개 아티팩트 https://claude.ai/artifact/6YkBgKWpxieHytCfbpNnVC · 비밀 흐름은 `script/secret/v2-night-bus.md`.
 - 사용자 플레이 후기 → `playtest/v2-night-bus-user-review.md`. 형식 전환·3D 추격 통과. 다음 후보: 전체 서사 얼개 / 힉스필드 그림 / 3D 조작감.
+- 서사 얼개 확정 → `design/structure-v2-draft.md` (만드는 순서 0~5단계). 비밀 개요 `script/secret/v2-outline.md`.
+- **1단계 완료**: 본편 `v2/circus-v2.html` (계단 0 버스 · 계단 1 침묵·휴게실 누르는 탐색) · 비공개 아티팩트 https://claude.ai/artifact/Lf6M8RfEcLH9WxvVC5AY2z
+- **다음**: 정웅 1단계 플레이 후기 → 고치기 → 2단계(2D 엔진, 계단 2 상가·계단 3 출구 복도).
 
 **운영 메모**
 - 사용량: Pro. 에이전트 1개 ≈ 토큰 12만. 5시간 한도 확인은 get_usage.
