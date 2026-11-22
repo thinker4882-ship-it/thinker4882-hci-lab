@@ -1,0 +1,532 @@
+<title>밤 버스</title>
+<style>
+/* 레이아웃: 폰 세로 한 화면. 미연시 층 / 3D 층 / 검은 층 / 시작·끝 화면을 겹쳐 두고 하나씩 켠다. 한 가지 룩(밤의 초록 형광등)만 쓴다. */
+:root {
+  --bg: #03110c;        /* 밤 버스 바깥 어둠 */
+  --ink: #d9eadf;       /* 대사 글자 */
+  --dim: #7fa392;       /* 보조 글자 */
+  --box: rgba(6, 22, 17, 0.88); /* 대화창 바탕 */
+  --line: #3f8a66;      /* 대화창 테두리, 형광등 초록 */
+  --pick: #e8c86a;      /* 고른 선택지, 차창 밖 불빛 색 */
+  --font: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); overflow: hidden; }
+#app { position: relative; height: 100%; max-width: 480px; margin: 0 auto; overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; touch-action: none; }
+.layer { position: absolute; inset: 0; }
+canvas.pix { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; object-fit: cover; }
+
+.screen { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 18px; text-align: center; padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.screen h1 { font-size: 1.6rem; font-weight: 600; letter-spacing: 0.08em; margin: 0; }
+.screen p { color: var(--dim); margin: 0; line-height: 1.7; font-size: 0.95rem; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 12px 22px; border-radius: 2px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+
+/* 대화창: 미연시 형식 */
+#box { position: absolute; left: 10px; right: 10px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); min-height: 118px; background: var(--box); border: 1px solid var(--line); padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; transition: transform 1.4s cubic-bezier(.5,0,.9,.4), opacity 1.4s; }
+#name { font-size: 0.8rem; color: var(--line); letter-spacing: 0.12em; }
+#text { font-size: 1.05rem; line-height: 1.6; min-height: 1.6em; white-space: pre-wrap; }
+#choices { display: flex; flex-direction: column; gap: 8px; }
+#choices button { text-align: left; padding: 10px 14px; transition: border-color .2s, color .2s; }
+#choices button.picked { border-color: var(--pick); color: var(--pick); }
+#box.falling { transform: translateY(120%) rotate(9deg); opacity: 0; }
+
+/* 3D 층 */
+#hint { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 0; right: 0; text-align: center; font-size: 0.8rem; color: var(--dim); transition: opacity 1.5s; pointer-events: none; }
+#walk { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(26px + env(safe-area-inset-bottom, 0px)); background: rgba(3, 17, 12, 0.5); padding: 16px 34px; touch-action: none; }
+#walk.on { border-color: var(--pick); color: var(--pick); }
+#black { background: #000; }
+#black #box { min-height: 90px; }
+@media (prefers-reduced-motion: reduce) { #box, #hint { transition: none; } }
+</style>
+
+<div id="app">
+  <div id="start" class="layer screen">
+    <h1>밤 버스</h1>
+    <p>이어폰을 끼고 해 줘.<br>화면을 누르면 다음으로 넘어가.</p>
+    <button id="startBtn">시작</button>
+  </div>
+
+  <div id="vn" class="layer" hidden>
+    <canvas id="vnCanvas" class="pix" width="135" height="240"></canvas>
+  </div>
+
+  <div id="world" class="layer" hidden>
+    <canvas id="gl" class="pix"></canvas>
+    <div id="hint">화면을 끌어서 둘러보기 · 버튼을 누르고 있으면 앞으로</div>
+    <button id="walk">앞으로</button>
+  </div>
+
+  <div id="black" class="layer" hidden></div>
+
+  <!-- 대화창은 층 사이를 옮겨 다닌다 (장치 4: 형식끼리 새어 나옴) -->
+  <div id="box" hidden><div id="name"></div><div id="text"></div><div id="choices"></div></div>
+
+  <div id="end" class="layer screen" hidden>
+    <h1>첫 장면 초안 끝</h1>
+    <p>어느 순간이 제일 이상했는지 기억해 둬.</p>
+    <button id="againBtn">다시 하기</button>
+  </div>
+</div>
+
+<!-- three.js: 3D 장면(버스 안 1인칭)을 그리려고 씀. r128은 전역 THREE를 주는 UMD 빌드가 있는 마지막 무렵 버전 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+/* ===================== 장치 6: 다시 열면 기억함 ===================== */
+/** 이 브라우저에만 남는 기록을 읽고 쓴다 (막히면 처음 온 사람으로 취급). */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("dcv2-" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("dcv2-" + k, JSON.stringify(v)); } catch (e) {} },
+};
+const visits = store.get("visits", 0);
+
+/* ===================== 장치 7: 소리 (WebAudio 합성) ===================== */
+let ac = null, master = null, noiseBuf = null;
+/** 사용자가 누른 뒤에만 오디오를 연다 (브라우저 정책). */
+function initAudio() {
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+}
+/** 버스 엔진 웅웅거림. 멈추는 함수를 돌려준다. */
+function startEngine() {
+  const g = ac.createGain(); g.gain.value = 0.13;
+  const f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 150;
+  const o1 = ac.createOscillator(), o2 = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain();
+  o1.type = o2.type = "sawtooth"; o1.frequency.value = 47; o2.frequency.value = 47.7;
+  lfo.frequency.value = 0.35; lg.gain.value = 0.04; lfo.connect(lg); lg.connect(g.gain);
+  o1.connect(f); o2.connect(f); f.connect(g); g.connect(master);
+  [o1, o2, lfo].forEach((o) => o.start());
+  return () => { [o1, o2, lfo].forEach((o) => { try { o.stop(); } catch (e) {} }); g.disconnect(); };
+}
+/** 형광등 지잉 소리. */
+function startBuzz() {
+  const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+  o.type = "square"; o.frequency.value = 100; f.type = "bandpass"; f.frequency.value = 900; f.Q.value = 3; g.gain.value = 0.025;
+  o.connect(f); f.connect(g); g.connect(master); o.start();
+  return g;
+}
+/** 대화창 글자 소리. dest를 주면 그 위치(패너)에서 들린다. */
+function blip(pitch, vol, dest) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = "square"; o.frequency.value = pitch;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+  o.connect(g); g.connect(dest || master); o.start(t); o.stop(t + 0.05);
+}
+/** 3D 위치에 붙는 소리 출구 (HRTF: 이어폰에서 앞뒤·좌우가 갈림). */
+function makePanner(x, y, z) {
+  const p = ac.createPanner(); p.panningModel = "HRTF"; p.distanceModel = "inverse"; p.refDistance = 1; p.rolloffFactor = 1.1;
+  setPannerPos(p, x, y, z); p.connect(master); return p;
+}
+/** 패너 위치 갱신 (옛 사파리 대비 setPosition도). */
+function setPannerPos(p, x, y, z) {
+  if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; } else p.setPosition(x, y, z);
+}
+/** 발소리 한 번. */
+function step(dest, vol) {
+  if (!noiseBuf) {
+    noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.12), ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4);
+  }
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noiseBuf; f.type = "lowpass"; f.frequency.value = 420; g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(dest || master); s.start();
+}
+/** 붙잡혔을 때 낮게 부풀어 오르는 화음. */
+function stinger() {
+  const t = ac.currentTime;
+  [55, 58.3, 82.4, 116].forEach((fq) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sawtooth"; o.frequency.value = fq;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 2.3);
+  });
+}
+/** 듣는 사람(플레이어) 위치·방향 갱신. */
+function setListener(x, y, z, yaw) {
+  const L = ac.listener, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  if (L.positionX) {
+    L.positionX.value = x; L.positionY.value = y; L.positionZ.value = z;
+    L.forwardX.value = fx; L.forwardY.value = 0; L.forwardZ.value = fz; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0;
+  } else { L.setPosition(x, y, z); L.setOrientation(fx, 0, fz, 0, 1, 0); }
+}
+
+/* ===================== 미연시 화면 그리기 (장치 3: 그림의 오류) ===================== */
+const vc = $("vnCanvas"), vx = vc.getContext("2d");
+const vn = { face: "calm", glitch: 0, track: false, passenger: true, eye: { x: 0, y: 0 }, pointer: null, running: false };
+/** 고정 시드 난수 (차창 불빛 자리가 매번 같게). */
+function seeded(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const cityDots = (() => { const r = seeded(7); return Array.from({ length: 40 }, () => [r(), r()]); })();
+
+/** 원근이 있는 2D 버스 안 (참조: 밤의 초록 형광등 버스). */
+function drawBus2D(t) {
+  const poly = (pts, c) => { vx.fillStyle = c; vx.beginPath(); vx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) vx.lineTo(pts[i], pts[i + 1]); vx.fill(); };
+  vx.fillStyle = "#06140f"; vx.fillRect(0, 0, 135, 240);
+  poly([0, 0, 135, 0, 86, 80, 49, 80], "#0c2a22");          // 천장
+  poly([0, 240, 135, 240, 86, 136, 49, 136], "#1d5a3c");    // 바닥
+  poly([0, 0, 49, 80, 49, 136, 0, 240], "#0f3a2c");         // 왼쪽 벽
+  poly([135, 0, 86, 80, 86, 136, 135, 240], "#12402f");     // 오른쪽 벽
+  vx.fillStyle = "#2f7a52"; vx.fillRect(49, 80, 37, 56);    // 뒷벽
+  // 오른쪽 차창과 바깥 불빛 (버스가 움직이니 불빛이 흐른다)
+  poly([135, 26, 86, 86, 86, 106, 135, 150], "#082219");
+  vx.fillStyle = "#e8c86a";
+  const flow = vn.passenger ? (t / 4000) % 1 : 0; // 엔진이 멈추면 바깥도 멈춘다
+  cityDots.forEach(([u, v]) => {
+    const d = (u + flow) % 1, x = 135 - d * 49, top = 26 + d * 60, bot = 150 - d * 44;
+    vx.fillRect(Math.round(x), Math.round(top + v * (bot - top) * 0.5), 1, 1);
+  });
+  // 천장 형광등 줄
+  vx.fillStyle = "#cdeed6"; poly([58, 4, 77, 4, 71, 76, 64, 76], "#cdeed6");
+  // 좌석 줄 (먼 것부터)
+  for (let k = 4; k >= 0; k--) {
+    const s = 1 - (k / 5) * 0.78, y = 104 + s * 34, h = s * 40, w = s * 26;
+    vx.fillStyle = "#1c3355"; vx.fillRect(Math.round(67 - s * 62), Math.round(y), Math.round(w), Math.round(h));
+    vx.fillRect(Math.round(67 + s * 36), Math.round(y), Math.round(w), Math.round(h));
+    vx.fillStyle = "#3a6fc0"; vx.fillRect(Math.round(67 - s * 62), Math.round(y), Math.round(w), Math.max(1, Math.round(2 * s)));
+    vx.fillRect(Math.round(67 + s * 36), Math.round(y), Math.round(w), Math.max(1, Math.round(2 * s)));
+  }
+  // 맨 뒤 승객 (흰 셔츠). 다시 온 사람에겐 처음부터 고개를 들고 있다.
+  if (vn.passenger) {
+    const up = visits > 0;
+    vx.fillStyle = "#d8dccf"; vx.fillRect(74, 116, 7, 9);
+    vx.fillStyle = "#0b0b0b"; vx.fillRect(up ? 75 : 76, up ? 110 : 112, 5, 5);
+    if (up) { vx.fillStyle = "#cfc7b8"; vx.fillRect(76, 112, 3, 3); }
+  }
+}
+
+/** 서아 (저해상도 미연시 그림). 표정과 동공이 상태를 따라간다. */
+function drawSeoa(t) {
+  const g = vn.glitch, j = () => (g > 0 && Math.random() < 0.08 * g ? (Math.random() < 0.5 ? -1 : 1) : 0);
+  vx.fillStyle = "#16110f"; vx.beginPath(); vx.ellipse(67, 152, 25, 32, 0, 0, Math.PI * 2); vx.fill(); // 뒷머리
+  vx.fillStyle = "#4f5f7f"; vx.beginPath(); vx.moveTo(30, 240); vx.lineTo(38, 192); vx.lineTo(96, 192); vx.lineTo(104, 240); vx.fill(); // 카디건
+  vx.fillStyle = "#d9cbb8"; vx.fillRect(62, 170, 11, 24); // 목
+  vx.fillStyle = "#e6d6c3"; vx.beginPath(); vx.ellipse(67, 151, 17, 21, 0, 0, Math.PI * 2); vx.fill(); // 얼굴
+  vx.fillStyle = "#16110f"; vx.beginPath(); vx.ellipse(67, 134, 19, 10, 0, 0, Math.PI * 2); vx.fill(); // 앞머리
+  vx.fillRect(49, 134, 5, 26); vx.fillRect(80, 134, 5, 26);
+  // 눈: 평소엔 플레이어를 보고 가끔 시선을 옮긴다. track이면 손가락을 따라온다.
+  let ex = 0, ey = 0;
+  if (vn.track && vn.pointer) { ex = vn.pointer.x; ey = vn.pointer.y; }
+  else if (!vn.track) { const s = Math.floor(t / 2600) % 5; ex = s === 3 ? -0.8 : 0; }
+  vn.eye.x += (ex - vn.eye.x) * (vn.track ? 0.6 : 0.2); vn.eye.y += (ey - vn.eye.y) * (vn.track ? 0.6 : 0.2);
+  const blink = !vn.track && (t % 4200) < 120;
+  [[57, 149], [72, 149]].forEach(([x, y]) => {
+    const yy = y + j();
+    if (blink) { vx.fillStyle = "#3a2a24"; vx.fillRect(x, yy + 1, 6, 1); return; }
+    vx.fillStyle = "#eef2ea"; vx.fillRect(x, yy, 6, 3);
+    vx.fillStyle = "#111"; vx.fillRect(x + 2 + Math.round(vn.eye.x * 2), yy + Math.round(vn.eye.y * 0.6), 2, 3);
+  });
+  // 입
+  const my = 162 + j();
+  vx.fillStyle = "#8a4b4b";
+  if (vn.face === "calm") vx.fillRect(64, my, 6, 1);
+  else if (vn.face === "smile") { vx.fillRect(64, my, 6, 1); vx.fillRect(63, my - 1, 1, 1); vx.fillRect(70, my - 1, 1, 1); }
+  else if (vn.face === "wrong") { vx.fillRect(57, my + 1, 20, 1); vx.fillRect(56, my - 1, 1, 2); vx.fillRect(77, my - 1, 1, 2); vx.fillStyle = "#eae3d6"; vx.fillRect(59, my, 16, 1); }
+}
+
+/** 미연시 한 프레임: 배경 → 서아 → 줄 밀림 → 초록 기운. */
+function vnFrame(t) {
+  if (!vn.running) return;
+  drawBus2D(t); drawSeoa(t);
+  for (let i = 0; i < vn.glitch * 3; i++) {
+    if (Math.random() < 0.3) { const y = Math.floor(Math.random() * 240), h = 2 + Math.floor(Math.random() * 6); vx.drawImage(vc, 0, y, 135, h, (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 5), y, 135, h); }
+  }
+  vx.fillStyle = "rgba(30,160,100,0.10)"; vx.fillRect(0, 0, 135, 240);
+  requestAnimationFrame(vnFrame);
+}
+/** 손가락 위치를 서아 기준 -1..1로 바꿔 둔다 (동공이 따라오게). */
+$("vn").addEventListener("pointermove", (e) => {
+  const r = vc.getBoundingClientRect();
+  vn.pointer = { x: Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2.4)), y: Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.62) * 2.4)) };
+});
+
+/* ===================== 대화창 (미연시 형식) ===================== */
+const box = $("box"), nameEl = $("name"), textEl = $("text"), choicesEl = $("choices");
+const talk = { typing: false, full: "", timer: null, onDone: null, waitTap: false, pitch: 620 };
+/** 한 줄을 타자 치듯 띄운다. stuckAt을 주면 그 글자에서 멈춘 채 굳는다. */
+function say(who, text, onDone, opts = {}) {
+  box.hidden = false; nameEl.textContent = who; textEl.textContent = ""; choicesEl.innerHTML = "";
+  talk.full = text; talk.onDone = onDone; talk.typing = true; talk.waitTap = false; talk.pitch = opts.pitch || 620;
+  let i = 0;
+  clearInterval(talk.timer);
+  talk.timer = setInterval(() => {
+    if (opts.stuckAt !== undefined && i >= opts.stuckAt) { clearInterval(talk.timer); talk.typing = false; if (opts.onStuck) opts.onStuck(); return; }
+    i++; textEl.textContent = text.slice(0, i);
+    if (i % 2 === 1 && text[i - 1] !== " ") blip(talk.pitch, 0.025, opts.dest);
+    if (i >= text.length) { clearInterval(talk.timer); talk.typing = false; talk.waitTap = !opts.auto; if (opts.auto) setTimeout(onDone, opts.auto); }
+  }, opts.speed || 48);
+}
+/** 화면을 누르면: 치는 중이면 다 보여 주고, 다 보였으면 다음 줄. */
+function onTap() {
+  if (talk.typing && talk.full && !talk.lockTyping) { clearInterval(talk.timer); textEl.textContent = talk.full; talk.typing = false; talk.waitTap = true; return; }
+  if (talk.waitTap) { talk.waitTap = false; const f = talk.onDone; talk.onDone = null; if (f) f(); }
+}
+$("vn").addEventListener("pointerup", onTap);
+$("black").addEventListener("pointerup", onTap);
+box.addEventListener("pointerup", (e) => { if (e.target.tagName !== "BUTTON") onTap(); });
+
+/* ===================== 장치 8: 조작의 배신 (한 번만) ===================== */
+/** 선택지를 띄우고, 누른 것과 반대 것이 골라진 것으로 처리한다. */
+function fakeChoice(labels, onPicked) {
+  nameEl.textContent = ""; textEl.textContent = ""; choicesEl.innerHTML = ""; talk.waitTap = false;
+  const btns = labels.map((l, i) => {
+    const b = document.createElement("button"); b.id = "choice" + i; b.textContent = l;
+    b.addEventListener("click", () => {
+      if (choicesEl.dataset.done) return; choicesEl.dataset.done = "1";
+      b.classList.add("picked"); blip(880, 0.03);
+      const other = btns[1 - i];
+      setTimeout(() => { b.classList.remove("picked"); other.classList.add("picked"); blip(440, 0.03); }, 380);
+      setTimeout(() => { choicesEl.innerHTML = ""; delete choicesEl.dataset.done; onPicked(labels[i], labels[1 - i]); }, 1300);
+    });
+    choicesEl.appendChild(b); return b;
+  });
+}
+
+/* ===================== 장면 1: 미연시 (대사는 A·C 톤, 짧게) ===================== */
+let stopEngine = null;
+/** 미연시 장면을 처음부터 돌린다. */
+function runVN() {
+  $("vn").hidden = false; vn.running = true; requestAnimationFrame(vnFrame);
+  stopEngine = startEngine();
+  const S = "서아";
+  const lines = [
+    () => { vn.face = "calm"; say(S, visits > 0 ? "또 막차네." : "막차 탔다.", next); },
+    () => { vn.face = "smile"; say(S, visits > 0 ? "이번엔 안 졸았네." : "너 졸았어. 두 정거장.", next); },
+    () => { vn.face = "calm"; say(S, "뒤에 저 사람, 아까부터 계속 자.", next); },
+    () => { vn.track = true; vn.face = "calm"; say(S, "……", next, { speed: 260 }); },
+    () => { vn.track = false; say(S, "어디서 내릴래?", next); },
+    () => fakeChoice(["다음 정류장", "종점까지"], (tapped, forced) => { store.set("wanted", tapped); state.forced = forced; next(); }),
+    () => { vn.face = "calm"; say(S, "그래.", next); },
+    () => { vn.face = "smile"; say(S, state.forced === "종점까지" ? "종점까지 가 보자." : "다음에 내리자.", next); },
+    // 침묵: 엔진이 뚝 끊기고, 뒤의 승객이 없어진다.
+    () => { stopEngine(); stopEngine = null; vn.passenger = false; say(S, "", next, { auto: 2600 }); textEl.textContent = ""; },
+    () => { vn.face = "wrong"; vn.glitch = 1; say(S, "조용하다.", next); },
+    () => { vn.glitch = 2; say(S, "괜찮아.", next); },
+    () => {
+      vn.glitch = 3; talk.lockTyping = true;
+      say(S, "괜찮아. 괜찮아. 괜찮아.", null, { speed: 70, stuckAt: 13, onStuck: () => setTimeout(toWorld, 900) });
+    },
+  ];
+  const state = { i: 0, forced: null };
+  /** 다음 줄로. */
+  function next() { const f = lines[state.i++]; if (f) f(); }
+  next();
+}
+
+/* ===================== 장면 2: 3D 버스 (장치 1·4·7) ===================== */
+const W3 = { yaw: 0, pitch: 0, pos: { x: 0, z: 4.6 }, walking: false, keys: {}, last: 0, t0: 0,
+  figure: null, fig: { x: 0.0, z: 8, active: false, grace: 0, lastMove: 0, panner: null },
+  boxMesh: null, boxPanner: null, boxTriggered: false, lights: [], windowTex: null, ended: false, stepAcc: 0 };
+let renderer, scene, camera;
+
+/** 캔버스로 작은 텍스처를 만든다 (픽셀 그대로, PS1 느낌). */
+function canvasTex(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; return t;
+}
+/** 거친 천 무늬 (좌석). */
+function fabricTex() {
+  return canvasTex(16, 16, (g) => { const r = seeded(3); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const v = 40 + Math.floor(r() * 40); g.fillStyle = `rgb(${v * 0.5},${v * 0.8},${v * 1.4})`; g.fillRect(x, y, 1, 1); } });
+}
+/** 3D 장면을 한 번 짓는다: 버스 몸통, 좌석, 손잡이 봉, 형광등, 차창, 흰 셔츠 사람, 바닥의 대화창. */
+function buildWorld() {
+  const cv = $("gl");
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false });
+  renderer.setPixelRatio(1);
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x03110c); scene.fog = new THREE.Fog(0x03110c, 1.5, 12);
+  camera = new THREE.PerspectiveCamera(70, 1, 0.05, 40); camera.rotation.order = "YXZ";
+  resize3D();
+
+  const lam = (c, map) => new THREE.MeshLambertMaterial({ color: c, map: map || null });
+  const add = (geo, mat, x, y, z, rx, ry) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rx) m.rotation.x = rx; if (ry) m.rotation.y = ry; scene.add(m); return m; };
+  scene.add(new THREE.AmbientLight(0x6fae8c, 0.55));
+  [-3.5, 0, 3.5].forEach((z) => { const p = new THREE.PointLight(0xcfffe0, 0.9, 7); p.position.set(0, 2.1, z); scene.add(p); W3.lights.push(p); });
+
+  const floorTex = canvasTex(8, 8, (g) => { g.fillStyle = "#2a7a50"; g.fillRect(0, 0, 8, 8); g.fillStyle = "#236a45"; g.fillRect(0, 0, 4, 4); g.fillRect(4, 4, 4, 4); });
+  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set(3, 14);
+  add(new THREE.PlaneGeometry(2.6, 12.4), lam(0xffffff, floorTex), 0, 0, 0, -Math.PI / 2);
+  add(new THREE.PlaneGeometry(2.6, 12.4), lam(0x123a2c), 0, 2.3, 0, Math.PI / 2);
+  add(new THREE.PlaneGeometry(12.4, 2.3), lam(0x1a5640), -1.3, 1.15, 0, 0, Math.PI / 2);
+  add(new THREE.PlaneGeometry(12.4, 2.3), lam(0x1a5640), 1.3, 1.15, 0, 0, -Math.PI / 2);
+  add(new THREE.PlaneGeometry(2.6, 2.3), lam(0x2f7a52), 0, 1.15, 6.2, 0, Math.PI);
+  add(new THREE.PlaneGeometry(2.6, 2.3), lam(0x2f7a52), 0, 1.15, -6.2);
+  // 앞쪽 문과 '하차' 표시
+  W3.door = add(new THREE.PlaneGeometry(0.9, 1.95), lam(0x6f8f80), 0.6, 0.98, -6.18);
+  const sign = canvasTex(32, 12, (g) => { g.fillStyle = "#052"; g.fillRect(0, 0, 32, 12); g.fillStyle = "#7f8"; g.font = "9px sans-serif"; g.fillText("하차", 7, 10); });
+  add(new THREE.PlaneGeometry(0.6, 0.22), new THREE.MeshBasicMaterial({ map: sign }), 0.6, 2.1, -6.17);
+
+  // 차창: 바깥 불빛이 흐른다 (그런데 엔진 소리는 없다)
+  W3.windowTex = canvasTex(128, 32, (g) => {
+    g.fillStyle = "#071d16"; g.fillRect(0, 0, 128, 32); const r = seeded(11);
+    g.fillStyle = "#e8c86a"; for (let i = 0; i < 70; i++) g.fillRect(Math.floor(r() * 128), Math.floor(r() * 20), 1, 1);
+    g.fillStyle = "#9fb8a8"; g.fillRect(0, 25, 128, 1); for (let x = 0; x < 128; x += 9) g.fillRect(x, 22, 1, 6);
+  });
+  W3.windowTex.wrapS = THREE.RepeatWrapping; W3.windowTex.repeat.set(3, 1);
+  const winMat = new THREE.MeshBasicMaterial({ map: W3.windowTex });
+  add(new THREE.PlaneGeometry(10.5, 0.9), winMat, -1.29, 1.55, 0, 0, Math.PI / 2);
+  add(new THREE.PlaneGeometry(10.5, 0.9), winMat, 1.29, 1.55, 0, 0, -Math.PI / 2);
+
+  // 좌석
+  const fab = lam(0xffffff, fabricTex()), bar = lam(0x3a6fc0);
+  for (let z = -4.6; z <= 5.2; z += 0.95) for (const x of [-0.85, 0.85]) {
+    add(new THREE.BoxGeometry(0.85, 0.12, 0.48), fab, x, 0.45, z);
+    add(new THREE.BoxGeometry(0.85, 0.6, 0.08), fab, x, 0.78, z + 0.24);
+    add(new THREE.BoxGeometry(0.85, 0.05, 0.05), bar, x, 1.1, z + 0.24);
+  }
+  // 손잡이 봉
+  const pole = lam(0xd08a2a), rail = lam(0xc8b030);
+  [-4, -1.5, 1, 3.5].forEach((z) => [-0.45, 0.45].forEach((x) => add(new THREE.CylinderGeometry(0.025, 0.025, 2.3, 6), pole, x, 1.15, z)));
+  [-0.45, 0.45].forEach((x) => add(new THREE.CylinderGeometry(0.02, 0.02, 12, 6), rail, x, 2.0, 0, Math.PI / 2));
+  // 형광등 몸체 (깜빡일 수 있게 따로 보관)
+  W3.tubes = [];
+  for (let z = -5; z <= 5; z += 2.5) for (const x of [-0.7, 0.7]) W3.tubes.push(add(new THREE.BoxGeometry(0.12, 0.03, 1.4), new THREE.MeshBasicMaterial({ color: 0xdfffe8 }), x, 2.28, z));
+
+  // 장치 4: 좌석 위에 떨어진 미연시 대화창. 내가 누른(하지만 묵살된) 말이 적혀 있다.
+  const wanted = store.get("wanted", "……");
+  const boxTex = canvasTex(128, 48, (g) => {
+    g.fillStyle = "rgba(6,22,17,0.95)"; g.fillRect(0, 0, 128, 48); g.strokeStyle = "#3f8a66"; g.strokeRect(1.5, 1.5, 125, 45);
+    g.fillStyle = "#3f8a66"; g.font = "9px sans-serif"; g.fillText("나", 8, 14);
+    g.fillStyle = "#d9eadf"; g.font = "12px sans-serif"; g.fillText(wanted, 8, 34);
+  });
+  W3.boxMesh = add(new THREE.PlaneGeometry(0.8, 0.3), new THREE.MeshBasicMaterial({ map: boxTex, transparent: true }), -0.85, 0.52, 3.0, -Math.PI / 2);
+  W3.boxMesh.rotation.z = 0.25;
+  W3.boxPanner = makePanner(-0.85, 0.52, 3.0);
+
+  // 장치 1: 흰 셔츠 사람 (평면 그림이 3D 공간에 서 있다). 얼굴은 비어 있다.
+  const figTex = canvasTex(24, 72, (g) => {
+    g.fillStyle = "#16120f"; g.fillRect(8, 0, 8, 5);           // 머리카락
+    g.fillStyle = "#d8cdbd"; g.fillRect(8, 4, 8, 9);           // 얼굴 (아무것도 없음)
+    g.fillRect(10, 13, 4, 6);                                   // 조금 긴 목
+    g.fillStyle = "#e6eadf"; g.fillRect(4, 19, 16, 22);        // 흰 셔츠
+    g.fillRect(2, 20, 3, 22); g.fillRect(19, 20, 3, 22);       // 팔
+    g.fillStyle = "#d8cdbd"; g.fillRect(2, 42, 3, 3); g.fillRect(19, 42, 3, 3);
+    g.fillStyle = "#4d6b9a"; g.fillRect(5, 41, 6, 28); g.fillRect(13, 41, 6, 28); // 청바지
+    g.fillStyle = "#111"; g.fillRect(4, 68, 7, 4); g.fillRect(13, 68, 7, 4);
+  });
+  W3.figure = add(new THREE.PlaneGeometry(0.62, 1.86), new THREE.MeshBasicMaterial({ map: figTex, transparent: true, alphaTest: 0.5 }), 0, 0.93, 8);
+  W3.figure.visible = false;
+  W3.fig.panner = makePanner(0, 0.2, 8);
+
+  bindControls();
+}
+/** 3D 캔버스를 낮은 해상도로 맞춘다 (가로 170픽셀 → 크게 늘려서 거친 화면). */
+function resize3D() {
+  if (!renderer) return;
+  const r = $("app").getBoundingClientRect(), w = 170, h = Math.round(170 * r.height / Math.max(1, r.width));
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize3D);
+
+/** 끌어서 둘러보기 + 버튼 누르고 있기 + 키보드. */
+function bindControls() {
+  const cv = $("gl"); let drag = null;
+  cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    W3.yaw += (e.clientX - drag.x) * 0.006; W3.pitch = Math.max(-0.6, Math.min(0.6, W3.pitch + (e.clientY - drag.y) * 0.004));
+    drag = { x: e.clientX, y: e.clientY };
+  });
+  const endDrag = () => { drag = null; };
+  cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+  const w = $("walk");
+  const on = (e) => { e.preventDefault(); W3.walking = true; w.classList.add("on"); };
+  const off = () => { W3.walking = false; w.classList.remove("on"); };
+  w.addEventListener("pointerdown", on); w.addEventListener("pointerup", off); w.addEventListener("pointercancel", off); w.addEventListener("pointerleave", off);
+  window.addEventListener("keydown", (e) => { W3.keys[e.key] = true; });
+  window.addEventListener("keyup", (e) => { W3.keys[e.key] = false; });
+}
+
+/** 미연시 → 3D 전환. 굳은 대화창이 3D 위에 잠깐 남았다가 떨어진다. */
+function toWorld() {
+  vn.running = false; $("vn").hidden = true;
+  store.set("visits", visits + 1);
+  if (!renderer) buildWorld();
+  $("world").hidden = false; resize3D();
+  W3.buzz = startBuzz();
+  setTimeout(() => box.classList.add("falling"), 1500);
+  setTimeout(() => { box.hidden = true; box.classList.remove("falling"); talk.lockTyping = false; }, 3000);
+  setTimeout(() => { $("hint").style.opacity = "0"; }, 5000);
+  W3.t0 = W3.last = performance.now();
+  requestAnimationFrame(worldFrame);
+}
+
+/** 사람이 화면 안(정면 시야)에 있는지. */
+function figureSeen() {
+  const dx = W3.fig.x - W3.pos.x, dz = W3.fig.z - W3.pos.z, d = Math.hypot(dx, dz) || 1;
+  return (dx / d) * -Math.sin(W3.yaw) + (dz / d) * -Math.cos(W3.yaw) > 0.9 && Math.abs(W3.pitch) < 0.55;
+}
+/** 3D 한 프레임: 이동 → 대화창 근처 반응 → 사람 규칙 → 형광등 → 렌더. */
+function worldFrame(now) {
+  if (W3.ended) return;
+  const dt = Math.min(0.05, (now - W3.last) / 1000); W3.last = now;
+  const k = W3.keys;
+  if (k.ArrowLeft || k.a) W3.yaw += 1.8 * dt;
+  if (k.ArrowRight || k.d) W3.yaw -= 1.8 * dt;
+  const fwd = (W3.walking || k.ArrowUp || k.w) ? 1 : (k.ArrowDown || k.s) ? -1 : 0;
+  if (fwd) {
+    W3.pos.x = Math.max(-0.38, Math.min(0.38, W3.pos.x - Math.sin(W3.yaw) * 1.1 * dt * fwd));
+    W3.pos.z = Math.max(-5.4, Math.min(5.5, W3.pos.z - Math.cos(W3.yaw) * 1.1 * dt * fwd));
+    W3.stepAcc += dt; if (W3.stepAcc > 0.55) { W3.stepAcc = 0; step(null, 0.12); }
+  }
+  camera.position.set(W3.pos.x, 1.55, W3.pos.z); camera.rotation.y = W3.yaw; camera.rotation.x = -W3.pitch;
+  setListener(W3.pos.x, 1.55, W3.pos.z, W3.yaw);
+  W3.windowTex.offset.x = (now / 9000) % 1;
+
+  // 대화창에 다가가면: 그 자리에서 글자 소리가 나고, 뒤에서 발소리가 하나 들린다.
+  const t = (now - W3.t0) / 1000;
+  if (!W3.boxTriggered && (Math.hypot(W3.pos.x + 0.85, W3.pos.z - 3.0) < 1.3 || t > 25)) {
+    W3.boxTriggered = true;
+    [0, 160, 320, 480].forEach((ms) => setTimeout(() => blip(620, 0.05, W3.boxPanner), ms));
+    setTimeout(() => {
+      const f = W3.fig; f.x = 0; f.z = Math.min(5.9, W3.pos.z + 3.2); f.active = true; f.grace = now + 1200 + 2600; f.lastMove = now;
+      W3.figure.visible = true; setPannerPos(f.panner, f.x, 0.2, f.z); step(f.panner, 0.9);
+    }, 1200);
+  }
+  // 장치 1: 안 볼 때만 다가온다.
+  const f = W3.fig;
+  if (f.active) {
+    W3.figure.position.set(f.x, 0.93, f.z);
+    W3.figure.lookAt(camera.position.x, 0.93, camera.position.z);
+    if (now > f.grace && !figureSeen() && now - f.lastMove > 750) {
+      const dz = W3.pos.z - f.z; f.z += Math.sign(dz) * Math.min(0.9, Math.abs(dz)); f.x += (W3.pos.x - f.x) * 0.5; f.lastMove = now;
+      setPannerPos(f.panner, f.x, 0.2, f.z); step(f.panner, 0.9);
+      if (Math.random() < 0.5) flicker();
+    }
+    if (Math.hypot(W3.pos.x - f.x, W3.pos.z - f.z) < 0.85) return caught();
+  }
+  if (W3.pos.z < -5.0) return reachedDoor();
+  renderer.render(scene, camera);
+  requestAnimationFrame(worldFrame);
+}
+/** 형광등이 잠깐 꺼졌다 켜진다. */
+function flicker() {
+  W3.lights.forEach((l) => (l.intensity = 0.1)); W3.tubes.forEach((m) => m.material.color.setHex(0x223a30));
+  setTimeout(() => { W3.lights.forEach((l) => (l.intensity = 0.9)); W3.tubes.forEach((m) => m.material.color.setHex(0xdfffe8)); }, 90 + Math.random() * 120);
+}
+
+/* ===================== 끝 ===================== */
+/** 3D를 멈추고 소리를 끈다. */
+function stopWorld() { W3.ended = true; W3.walking = false; if (W3.buzz) W3.buzz.gain.value = 0; $("world").hidden = true; }
+/** 붙잡힘: 검은 화면, 낮은 화음, 진동, 그리고 대화창 한 줄. */
+function caught() {
+  stopWorld(); stinger(); try { navigator.vibrate && navigator.vibrate(250); } catch (e) {}
+  $("black").hidden = false; $("black").appendChild(box);
+  setTimeout(() => say("서아", "종점이야.", showEnd), 1600);
+}
+/** 앞문에 닿음: 문이 열리고 소리가 전부 사라진다. */
+function reachedDoor() {
+  stopWorld(); $("black").hidden = false; $("black").appendChild(box);
+  setTimeout(() => say("서아", "……", showEnd, { speed: 300 }), 1800);
+}
+/** 끝 화면. */
+function showEnd() { box.hidden = true; $("black").hidden = true; $("end").hidden = false; }
+
+/* ===================== 시작 ===================== */
+$("startBtn").addEventListener("click", () => { initAudio(); $("start").hidden = true; runVN(); });
+$("againBtn").addEventListener("click", () => location.reload());
+</script>
