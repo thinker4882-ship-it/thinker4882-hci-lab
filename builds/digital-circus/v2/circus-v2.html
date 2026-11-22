@@ -103,6 +103,14 @@ function startHum() {
   o.type = "square"; o.frequency.value = 100; f.type = "bandpass"; f.frequency.value = 800; f.Q.value = 3; g.gain.value = 0.018;
   o.connect(f); f.connect(g); g.connect(master); o.start(); return o;
 }
+/** 돌아가는 세탁기: 낮은 웅웅거림에 통이 구르는 박자. 멈추는 함수를 돌려준다. */
+function startWasher() {
+  const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain();
+  o.type = "triangle"; o.frequency.value = 62; f.type = "lowpass"; f.frequency.value = 220; g.gain.value = 0.07;
+  lfo.frequency.value = 0.9; lg.gain.value = 0.05; lfo.connect(lg); lg.connect(g.gain);
+  o.connect(f); f.connect(g); g.connect(master); o.start(); lfo.start();
+  return () => { try { o.stop(); lfo.stop(); } catch (e) {} g.disconnect(); };
+}
 /** 글자 소리. */
 function blip(pitch, vol) {
   if (!ac || !pitch) return;
@@ -160,7 +168,7 @@ const vc = $("vnCanvas"), vx = vc.getContext("2d");
 const vn = {
   scene: "bus", big: true, face: "calm", glitch: 0, track: false, pointer: null, eye: { x: 0, y: 0 },
   passenger: true, flowing: true, lightsOn: true,                     // 버스 상태
-  curtainOpen: false, busOutside: true, paintingFigure: visits > 0, doorOpen: false, // 휴게실 상태
+  washer: "spin", busOutside: true, paintingFigure: visits > 0, doorOpen: false, // 빨래방 상태
 };
 /** 고정 시드 난수 (불빛 자리가 매번 같게). */
 function seeded(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
@@ -200,48 +208,46 @@ function drawBus(t) {
   if (!vn.lightsOn) { vx.fillStyle = "rgba(0,0,0,0.45)"; vx.fillRect(0, 0, 135, 240); }
 }
 
-/** 계단 1: 건물 1층 휴게실 (참조 2번). 상태에 따라 커튼·그림·문이 바뀐다. */
+/** 계단 1: 정류장 옆 24시 무인 빨래방. 상태에 따라 창밖·포스터·세탁기·문이 바뀐다. */
 function drawRoom(t) {
-  vx.fillStyle = "#16352b"; vx.fillRect(0, 0, 135, 40);                 // 천장
-  poly([45, 10, 90, 10, 95, 24, 40, 24], "#d8f2dc");                      // 형광등 판
-  vx.fillStyle = "#3d6e58"; vx.fillRect(0, 40, 135, 120);                // 벽
-  vx.fillStyle = "#2c5a52"; vx.fillRect(0, 160, 135, 80);                // 카펫
-  const r = seeded(5); vx.fillStyle = "#26504a"; for (let i = 0; i < 90; i++) vx.fillRect(Math.floor(r() * 135), 160 + Math.floor(r() * 80), 1, 1);
-  // 창문과 커튼
-  if (vn.curtainOpen) {
-    vx.fillStyle = "#06140f"; vx.fillRect(8, 62, 40, 82);
-    if (vn.busOutside) { vx.fillStyle = "#1d3a30"; vx.fillRect(12, 104, 34, 14); vx.fillStyle = "#cfe8c0"; for (let x = 14; x < 44; x += 6) vx.fillRect(x, 106, 4, 5); }
-    vx.fillStyle = "rgba(160,200,180,0.35)"; for (let i = 0; i < 14; i++) { const x = 9 + ((i * 7 + t / 30) % 38), y = 63 + ((i * 13 + t / 9) % 78); vx.fillRect(Math.floor(x), Math.floor(y), 1, 3); }
-    vx.fillStyle = "#2a1612"; vx.fillRect(4, 60, 8, 86); vx.fillRect(44, 60, 8, 86);
-  } else {
-    vx.fillStyle = "#2a1612"; vx.fillRect(8, 60, 40, 86);
-    vx.fillStyle = "#3a201a"; for (let x = 11; x < 48; x += 5) vx.fillRect(x, 60, 1, 86);
+  vx.fillStyle = "#16352b"; vx.fillRect(0, 0, 135, 44);                 // 천장
+  vx.fillStyle = "#d8f2dc"; vx.fillRect(14, 14, 46, 3); vx.fillRect(76, 14, 46, 3); // 형광등 두 줄
+  vx.fillStyle = "#5f8f7a"; vx.fillRect(0, 44, 135, 120);                // 벽
+  for (let y = 164; y < 240; y += 8) for (let x = 0; x < 135; x += 8) {   // 타일 바닥
+    vx.fillStyle = ((x + y) / 8) % 2 ? "#3f6b5c" : "#4a7a6a"; vx.fillRect(x, y, 8, 8);
   }
-  // 문
-  vx.fillStyle = "#5a4a30"; vx.fillRect(56, 64, 32, 96);
-  if (vn.doorOpen) { vx.fillStyle = "#eef6e8"; vx.fillRect(58, 66, 28, 94); vx.fillStyle = "#9a7a4a"; vx.fillRect(58, 66, 6, 94); }
-  else { vx.fillStyle = "#9a7a4a"; vx.fillRect(58, 66, 28, 94); vx.fillStyle = "#d0c090"; vx.fillRect(81, 113, 2, 2); }
-  // 그림: 초록 언덕. 다시 보면 언덕 위에 작은 사람.
-  vx.fillStyle = "#d8d0b8"; vx.fillRect(98, 70, 26, 30);
-  const gr = vx.createLinearGradient(0, 73, 0, 97); gr.addColorStop(0, "#1f8a5a"); gr.addColorStop(1, "#0b2a1e");
-  vx.fillStyle = gr; vx.fillRect(101, 73, 20, 24);
-  vx.fillStyle = "#08180f"; vx.beginPath(); vx.ellipse(111, 98, 13, 7, 0, Math.PI, 0); vx.fill();
-  if (vn.paintingFigure) { vx.fillStyle = "#e6eadf"; vx.fillRect(111, 89, 1, 2); }
-  // 서랍장과 램프
-  vx.fillStyle = "#6a4a2a"; vx.fillRect(6, 150, 40, 26); vx.fillStyle = "#8a6a3a"; vx.fillRect(6, 150, 40, 3);
-  const glow = vx.createRadialGradient(23, 132, 1, 23, 132, 26); glow.addColorStop(0, "rgba(255,245,210,0.35)"); glow.addColorStop(1, "rgba(255,245,210,0)");
-  vx.fillStyle = glow; vx.fillRect(0, 106, 50, 50);
-  vx.fillStyle = "#c8c0a0"; vx.fillRect(22, 138, 3, 12);
-  poly([14, 126, 32, 126, 29, 138, 17, 138], "#efe8d0");
-  // 소파
-  vx.fillStyle = "#4a7d6c"; vx.fillRect(90, 138, 44, 14); vx.fillStyle = "#3f6f5f"; vx.fillRect(90, 150, 44, 22);
-  vx.fillStyle = "#355e51"; vx.fillRect(88, 144, 5, 28); vx.fillRect(131, 144, 4, 28);
-  // 소파의 작은 서아 (큰 그림이 없을 때만)
+  // 앞쪽 유리창: 빗줄기, 창밖 정류장의 버스
+  vx.fillStyle = "#06140f"; vx.fillRect(4, 56, 40, 94);
+  if (vn.busOutside) { vx.fillStyle = "#1d3a30"; vx.fillRect(8, 108, 34, 14); vx.fillStyle = "#cfe8c0"; for (let x = 10; x < 40; x += 6) vx.fillRect(x, 110, 4, 5); }
+  vx.fillStyle = "rgba(160,200,180,0.35)"; for (let i = 0; i < 14; i++) { const x = 5 + ((i * 7 + t / 30) % 38), y = 57 + ((i * 13 + t / 9) % 90); vx.fillRect(Math.floor(x), Math.floor(y), 1, 3); }
+  vx.fillStyle = "#2c4a40"; vx.fillRect(4, 56, 40, 2); vx.fillRect(4, 148, 40, 2); vx.fillRect(23, 56, 2, 94);
+  // 건조기 두 대 (위), 세탁기 두 대 (아래). 오른쪽 아래 세탁기만 돈다.
+  for (const x of [50, 74]) {
+    vx.fillStyle = "#d8e2dc"; vx.fillRect(x, 60, 22, 34); vx.fillStyle = "#20302a"; vx.beginPath(); vx.arc(x + 11, 79, 7, 0, Math.PI * 2); vx.fill();
+    vx.fillStyle = "#d8e2dc"; vx.fillRect(x, 102, 22, 48); vx.fillStyle = "#9fb0a8"; vx.fillRect(x + 2, 104, 18, 4);
+    vx.fillStyle = "#20302a"; vx.beginPath(); vx.arc(x + 11, 128, 8, 0, Math.PI * 2); vx.fill();
+  }
+  if (vn.washer === "spin") { const a = t / 180; vx.fillStyle = "#7f9fb8"; vx.fillRect(85 + Math.round(Math.cos(a) * 4) - 2, 128 + Math.round(Math.sin(a) * 4) - 2, 5, 4); }
+  else if (vn.washer === "shirt") { vx.fillStyle = "#e6eadf"; vx.fillRect(81, 127, 8, 5); }
+  vx.fillStyle = vn.washer === "spin" ? "#7fe0a0" : "#304a40"; vx.fillRect(91, 105, 2, 2); // 작동 불빛
+  // 포스터: 섬유유연제 광고의 초록 언덕. 다시 보면 언덕 위에 작은 사람.
+  vx.fillStyle = "#e8e2cc"; vx.fillRect(102, 60, 26, 32);
+  const gr = vx.createLinearGradient(0, 62, 0, 86); gr.addColorStop(0, "#9fd8b8"); gr.addColorStop(1, "#1f8a5a");
+  vx.fillStyle = gr; vx.fillRect(104, 62, 22, 24);
+  vx.fillStyle = "#176a44"; vx.beginPath(); vx.ellipse(115, 88, 14, 8, 0, Math.PI, 0); vx.fill();
+  vx.fillStyle = "#e8e2cc"; vx.fillRect(104, 86, 22, 4); vx.fillStyle = "#7a8a80"; vx.fillRect(107, 87, 16, 1);
+  if (vn.paintingFigure) { vx.fillStyle = "#f4f4ec"; vx.fillRect(115, 77, 1, 2); }
+  // 직원 전용 문
+  vx.fillStyle = "#3a4a44"; vx.fillRect(102, 98, 26, 66);
+  if (vn.doorOpen) { vx.fillStyle = "#eef6e8"; vx.fillRect(104, 100, 22, 64); vx.fillStyle = "#8a9a92"; vx.fillRect(104, 100, 5, 64); }
+  else { vx.fillStyle = "#8a9a92"; vx.fillRect(104, 100, 22, 64); vx.fillStyle = "#e8e2cc"; vx.fillRect(108, 108, 14, 5); vx.fillStyle = "#d0c090"; vx.fillRect(122, 132, 2, 2); }
+  // 주황 벤치와 작은 서아 (큰 그림이 없을 때만)
+  vx.fillStyle = "#c8742a"; vx.fillRect(14, 172, 80, 7); vx.fillStyle = "#8a4e1c"; vx.fillRect(18, 179, 3, 10); vx.fillRect(87, 179, 3, 10);
   if (!vn.big) {
-    vx.fillStyle = "#16110f"; vx.beginPath(); vx.arc(108, 134, 6, 0, Math.PI * 2); vx.fill();
-    vx.fillStyle = "#e6d6c3"; vx.beginPath(); vx.ellipse(108, 136, 3.5, 4.5, 0, 0, Math.PI * 2); vx.fill();
-    vx.fillStyle = "#4f5f7f"; vx.fillRect(102, 141, 12, 12);
-    vx.fillStyle = "#cfe8f0"; vx.fillRect(112, 144, 2, 3); // 폰 불빛
+    vx.fillStyle = "#16110f"; vx.beginPath(); vx.arc(64, 156, 6, 0, Math.PI * 2); vx.fill();
+    vx.fillStyle = "#e6d6c3"; vx.beginPath(); vx.ellipse(64, 158, 3.5, 4.5, 0, 0, Math.PI * 2); vx.fill();
+    vx.fillStyle = "#4f5f7f"; vx.fillRect(58, 163, 12, 10);
+    vx.fillStyle = "#cfe8f0"; vx.fillRect(68, 166, 2, 3); // 폰 불빛
   }
 }
 
@@ -333,7 +339,7 @@ function onTap() {
 box.addEventListener("pointerup", (e) => { if (e.target.tagName !== "BUTTON") onTap(); });
 
 /* ===================== 누르는 탐색 (계단 1 휴게실) ===================== */
-const SPOTS = { lamp: [12, 124, 24, 28], curtain: [6, 60, 44, 86], painting: [97, 69, 28, 32], door: [56, 64, 32, 96], seoa: [96, 126, 22, 30] };
+const SPOTS = { window: [4, 56, 40, 94], washer: [50, 60, 46, 90], poster: [102, 60, 26, 32], door: [102, 98, 26, 66], seoa: [54, 148, 22, 28] };
 let spotResolve = null;
 /** 대화창을 숨기고, 플레이어가 누른 물건 이름을 돌려준다. */
 function pickSpot() {
@@ -396,35 +402,36 @@ async function stair1Bus() {
   if (d === 1) { vn.face = "calm"; await say(S, "기사님 자리 비어 있어."); }
   vn.scene = "black"; vn.big = false;
   const rain = startRain(0.0); rain.gain.linearRampToValueAtTime(0.06, ac.currentTime + 2);
-  await say("", "(비가 온다. 정류장 옆 건물 1층에 '24시 휴게실' 불이 켜져 있다.)");
+  await say("", "(비가 온다. 정류장 옆에 '24시 무인 빨래방' 불이 켜져 있다.)");
   await say(S, "저기 들어가서 비 좀 피하자. 택시도 거기서 부르고.");
   burst(900, 0.4, 0.08);
-  await say("", "(유리문을 밀고 들어간다.)");
+  await say("", "(유리문을 밀고 들어간다. 세제 냄새가 난다.)");
   rain.gain.linearRampToValueAtTime(0.015, ac.currentTime + 1.5);
 }
 
-/** 건물 1층 휴게실. 누르며 둘러보는 동안 소리가 하나씩 어긋난다. */
+/** 24시 무인 빨래방. 누르며 둘러보는 동안 소리가 하나씩 어긋난다. */
 async function stair1Room() {
-  vn.scene = "room";
-  const hum = startHum(), stopClock = startClock();
-  await say(S, "24시라더니 아무도 없네.");
+  vn.scene = "room"; vn.washer = "spin";
+  const hum = startHum(), stopClock = startClock(), washer = startWasher();
+  await say(S, "다행이다, 여기는 열려 있네.");
   await say(S, "택시 부를게. 잠깐만.");
   hint("둘러볼 곳을 눌러 봐");
   const seen = {}; let music = null, unlocked = false, after = 0, seoaTalk = 0;
   for (;;) {
     const id = await pickSpot();
     const n = (seen[id] = (seen[id] || 0) + 1);
-    if (id === "lamp") {
-      if (music) { hum.frequency.setValueAtTime(hum.frequency.value * 0.94, ac.currentTime); await say("", "(전구 소리가 아까보다 낮다.)"); }
-      else await say("", "(전구가 지잉 울린다.)");
-    } else if (id === "curtain") {
-      if (n === 1) { vn.curtainOpen = true; await say("", "(창밖 정류장에 버스가 그대로 서 있다. 불이 켜져 있다.)"); }
+    if (id === "washer") {
+      if (music) { vn.washer = "shirt"; await say("", "(세탁기가 멈춰 있다. 안에 흰 셔츠가 한 장 들어 있다.)"); }
+      else if (n === 1) await say("", "(세탁기 하나가 혼자 돌아가고 있다. 주인은 없다.)");
+      else { [0, 300, 600].forEach((ms) => setTimeout(() => blip(1320, 0.04), ms)); await say("", "(다 됐다는 알림이 울린다. 아무도 오지 않는다.)"); }
+    } else if (id === "window") {
+      if (n === 1) await say("", "(창밖 정류장에 버스가 그대로 서 있다. 불이 켜져 있다.)");
       else { vn.busOutside = false; await say("", "(버스가 없다.)"); }
-    } else if (id === "painting") {
-      if (n === 1 && !vn.paintingFigure) await say("", "(초록 언덕 그림.)");
+    } else if (id === "poster") {
+      if (n === 1 && !vn.paintingFigure) await say("", "(섬유유연제 광고. 초록 언덕.)");
       else { vn.paintingFigure = true; await say("", "(언덕 위에 사람이 하나 서 있다.)"); }
     } else if (id === "door") {
-      if (!unlocked) await say("", music ? "(잠겨 있다. 음악은 이 너머에서 난다.)" : n === 1 ? "(건물 안쪽으로 이어지는 문. 잠겨 있다.)" : "(손잡이가 차갑다.)");
+      if (!unlocked) await say("", music ? "(잠겨 있다. 음악은 이 너머에서 난다.)" : n === 1 ? "(직원 전용. 잠겨 있다.)" : "(손잡이가 차갑다.)");
       else break;
     } else if (id === "seoa") {
       seoaTalk++;
@@ -434,13 +441,15 @@ async function stair1Room() {
     }
     const distinct = Object.keys(seen).length;
     if (!music && distinct >= 3) {
+      washer(); vn.washer = "stop"; // 세탁기가 뚝 멈추고, 그 빈자리에 음악이 들어온다
+      await wait(1800);
       music = startMusicBox();
       await wait(2500);
       vn.face = "calm"; await say(S, "음악 소리 들려?");
       const m = await choose(["들려.", "안 들리는데."]);
       if (m === 0) { vn.face = "worry"; await say(S, "어디서 나는 거지."); }
       else { music.pause(1800); vn.face = "calm"; await say(S, "……그래? 나만 들리나."); }
-    } else if (music && !unlocked && (++after >= 2 && (seen.curtain >= 2 || seen.painting >= 2) || after >= 4)) { // 바뀐 것을 하나는 보고 나서 열린다
+    } else if (music && !unlocked && (++after >= 2 && (seen.window >= 2 || seen.poster >= 2 || seen.washer >= 2) || after >= 4)) { // 바뀐 것을 하나는 보고 나서 열린다
       unlocked = true; burst(2600, 0.08, 0.2);
       vn.face = "calm"; await say(S, "문 열렸다.", { pitch: 520 }); // 이 한 줄만 목소리가 낮다
       vn.doorOpen = true;
