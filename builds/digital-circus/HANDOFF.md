@@ -151,3 +151,15 @@ curl -o assets/corridor.png "https://d8j0ntlcm91z4.cloudfront.net/user_3F7q9qnOL
 | corridor.png | 941a57cb-c2a8-43cf-a2df-d13f9a9f9232 | 무대 뒤 줄무늬 복도, 끝에 얼굴 없는 키 큰 단장, 상자 위 불상, 금 간 거울의 노란 부적 |
 
 주의: v0 후기에서 "너무 갑자기 매트릭스 세계"가 나왔다. collapse.png는 전환의 마지막 단계용으로 쓰고, 중간 단계 이미지를 새로 만드는 게 좋다.
+
+## 부록 B. 서아 그림 (2026-11-22, gpt_image_2_6, 3:4) — 확정: D
+- 후보 A·B(첫 생성) → B 화풍 선택, 나이가 많아 보인다는 후기 → B 참조로 젊게 C·D → **D 확정**. 원본은 `assets/seoa-d*.png`(A·B·C는 로컬에만).
+- 게임용: 배경 제거(image_background_remover) 뒤 270×360으로 줄여 `v2/img/seoa-{calm,smile,worry}.png`. 아티팩트에는 `files`로 같이 올린다.
+
+| 표정 | 원본 job ID | 배경 제거 job ID |
+|---|---|---|
+| smile (D) | 104209e8-7c0d-4434-963f-95b2e4af6672 | f3774904-d591-4c76-8d83-9a0cd4d067e9 |
+| calm | 16a99b34-571a-40cf-b9ad-1fa0410628e6 | 60761cfd-c690-47b3-8d90-31ad1bf16d3e |
+| worry | 890913b1-bd4d-4f58-8cfb-3090c4039a98 | 09b87959-ab80-4c6a-9907-9b5ffc9eb9ea |
+
+- 새 표정은 D(104209e8…)를 `image_references`로 넣고 "표정만 바꿔" 프롬프트로 만든다. 크레딧: 생성 0.75/장.
