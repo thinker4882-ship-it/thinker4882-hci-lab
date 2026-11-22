@@ -17,8 +17,8 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font); overf
 #app { position: relative; height: 100%; max-width: 480px; margin: 0 auto; overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; touch-action: none; }
 .layer { position: absolute; inset: 0; }
 canvas.pix { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; object-fit: cover; }
-/* 서아 그림: 대화창 뒤, 아래쪽 가운데. 살짝 거칠게 늘려 PS1 느낌을 맞춘다. */
-.sprite { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 92%; max-width: 440px; image-rendering: pixelated; pointer-events: none; }
+/* 서아 그림: 대화창 뒤, 아래쪽 가운데. 화면 절반쯤 아래에만 두어 버스 뒷자리가 보이게 한다. */
+.sprite { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 58%; max-width: 280px; image-rendering: pixelated; pointer-events: none; }
 #flash { background: #f2f8ee; opacity: 0; pointer-events: none; transition: opacity 1.2s; }
 #flash.on { opacity: 1; }
 
@@ -432,10 +432,16 @@ async function stair1Room() {
       if (m === 0) { vn.face = "worry"; await say(S, "어디서 나는 거지."); }
       else { music.pause(1800); vn.face = "calm"; await say(S, "……그래? 나만 들리나."); }
     } else if (music && !unlocked && (++after >= 2 && (seen.window >= 2 || seen.poster >= 2 || seen.washer >= 2) || after >= 4)) { // 바뀐 것을 하나는 보고 나서 열린다
-      unlocked = true; burst(2600, 0.08, 0.2);
+      // 들어온 유리문이 잠겨서, 저절로 열린 직원 전용 문만 남는다
+      unlocked = true; [0, 180].forEach((ms) => setTimeout(() => blip(990, 0.04), ms));
+      await say("", "(유리문 쪽에서 삑 소리. 문 위 화면에 '출입 인증 후 이용하세요'가 떠 있다.)");
+      vn.face = "worry"; await say(S, "들어올 땐 그냥 열렸는데.");
+      await say("", "(서아가 유리문을 밀어 본다. 꿈쩍도 안 한다.)");
+      burst(2600, 0.08, 0.2);
+      await say("", "(직원 전용 문에서 딸깍 소리가 난다.)");
       vn.face = "calm"; await say(S, "문 열렸다.", { pitch: 520 }); // 이 한 줄만 목소리가 낮다
       vn.doorOpen = true;
-      vn.face = "smile"; await say(S, "가 보자. 뒷문으로 나가면 큰길이야.");
+      vn.face = "worry"; await say(S, "저쪽으로 나가 보자. 뒤로 나가는 길이 있겠지.");
     }
   }
   stopClock(); hum.stop(); music && music.stop();
