@@ -381,14 +381,14 @@ function hint(text, ms) { const h = $("hint"); h.textContent = text; h.hidden = 
 
 /* ===================== 계단 0: 밤 버스 (따뜻한 기저선) ===================== */
 const S = "서아";
-const RUN = { first: "그러게.", umbrella: null }; // 이번 판에서 고른 대답 (계단 5·엔딩이 기억해 냄)
+const RUN = { umbrella: null }; // 이번 판에서 고른 우산 대답 (계단 5가 기억해 냄)
 let stopEngine = null;
 /** 야근 뒤 막차. 사소한 대화와 첫 번째 '어?'. */
 async function stair0() {
   vn.scene = "bus"; stopEngine = startEngine();
   vn.face = "calm"; await say(S, visits > 0 ? "또 막차네, 우리." : "결국 막차네.");
   vn.face = "worry"; await say(S, "팀장님은 왜 꼭 여섯 시에 회의를 잡을까.");
-  const a = await choose(["그러게.", "내일도 그럴걸."]); RUN.first = ["그러게.", "내일도 그럴걸."][a];
+  const a = await choose(["그러게.", "내일도 그럴걸."]);
   if (a === 0) { vn.face = "smile"; await say(S, "그러게가 뭐야. 같이 욕해 줘야지."); }
   else { vn.face = "worry"; await say(S, "하지 마. 진짜 그럴 것 같잖아."); }
   vn.face = "calm"; await say(S, "아, 너 우산 있어? 밤에 비 온대.");
@@ -1567,7 +1567,7 @@ function chatChoose(labels) {
     });
   });
 }
-/** 엔딩: 낮의 빨래방에서 깨어남 → 서아 메시지(합리적 설명) → 출근 버스 → 작은 틈 하나. */
+/** 엔딩: 낮의 빨래방에서 깨어남 → 서아 메시지(합리적 설명) → 출근 버스 → 서지 않는 버스. */
 async function ending() {
   vn.scene = "black"; $("vn").hidden = false; box.hidden = true;
   await wait(1200); vibrate(); await wait(1700); vibrate(); await wait(1500);
@@ -1594,14 +1594,20 @@ async function ending() {
   const eng = startEngine();
   await say("", "(출근 버스. 승객은 나 혼자다.)", { small: true });
   await say("", "(햇빛이 따뜻하다. 어젯밤 일이 멀게 느껴진다.)", { small: true });
-  vibrate(); await say("", "(폰이 울린다.)", { small: true });
-  box.hidden = true; $("chat").hidden = false;
-  await chatSeoa("다음은 수정교 정류장.", 900);
-  await wait(1600); $("chat").hidden = true;
   await say("안내 방송", "다음은 수정교, 수정교 정류장입니다.", { small: true });
-  box.hidden = true; $("chat").hidden = false; await wait(1500);
-  await chatType(RUN.first); await wait(900); chatAdd("read", "읽음"); await wait(4500); // 내가 안 쳤는데 보내진다
-  eng(); $("chat").hidden = true;
+  await say("", "(회사 앞이다. 하차 벨을 누른다.)", { small: true });
+  blip(1320, 0.06); box.hidden = true; await wait(2200);
+  await say("", "(버스가 서지 않는다.)", { small: true });
+  box.hidden = true; await wait(900);
+  // 끝 화면 직전: 낮이 꺼지고, 서커스가 버스 안까지 들어온다 (의미를 몰라도 섬뜩하게)
+  eng(); vn.day = false; vn.glitch = 0.4; await wait(700); vn.glitch = 0;
+  const march = startMarch(); march.rate = 1.7; march.pitch = -5;
+  await wait(1600);
+  await say("안내 방송", "손님.", { small: true, pitch: 220, speed: 110, auto: 1200 });
+  await say("안내 방송", "자리에 앉아 주세요.", { small: true, pitch: 220, speed: 130, auto: 1800 });
+  box.hidden = true; vibrate(); await wait(600);
+  $("chat").hidden = false; await chatSeoa("앉아.", 1300); await wait(2600);
+  march.stop(); $("chat").hidden = true; vn.scene = "black"; await wait(1800);
 }
 
 /* ===================== 흐름 ===================== */
