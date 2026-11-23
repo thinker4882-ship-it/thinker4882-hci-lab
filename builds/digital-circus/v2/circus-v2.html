@@ -41,6 +41,26 @@ button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
 #gl { touch-action: none; }
 #stick { position: absolute; width: 76px; height: 76px; border: 1px solid var(--line); border-radius: 50%; transform: translate(-50%, -50%); background: rgba(6, 22, 17, 0.35); pointer-events: none; }
 #labels span { position: absolute; transform: translate(-50%, -100%); font-size: 0.68rem; color: var(--ink); background: rgba(3, 17, 12, 0.7); padding: 1px 5px; white-space: nowrap; letter-spacing: 0.04em; }
+/* 계단 5 시스템 대화상자: 일부러 게임과 다른 밝은 룩 */
+#sysdlg { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.3); padding: 16px; }
+#sysdlg .card { background: #f3f3f3; color: #202124; font-family: system-ui, sans-serif; width: 100%; max-width: 340px; padding: 20px 20px 14px; border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
+#sysdlg h2 { font-size: 1rem; font-weight: 600; margin: 0 0 10px; }
+#sysdlg p { font-size: 0.9rem; line-height: 1.5; margin: 0 0 16px; color: #3c4043; }
+#sysdlg .row { display: flex; justify-content: flex-end; gap: 8px; }
+#sysdlg button { color: #1a57c9; border: 1px solid #c4c7cc; background: #fff; border-radius: 4px; padding: 8px 12px; font-size: 0.85rem; }
+/* 엔딩 메신저: 낮의 폰 화면 */
+#chat { background: #e9eef2; color: #1d2328; display: flex; flex-direction: column; font-family: var(--font); }
+#chatHead { padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px; background: #fff; font-weight: 600; border-bottom: 1px solid #d5dbe0; }
+#chatLog { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+#chatLog .m { max-width: 76%; padding: 8px 12px; border-radius: 14px; line-height: 1.45; font-size: 0.95rem; background: #fff; align-self: flex-start; }
+#chatLog .m.me { background: #ffe680; align-self: flex-end; }
+#chatLog .t { align-self: center; font-size: 0.75rem; color: #7a858e; }
+#chatLog .read { align-self: flex-end; font-size: 0.7rem; color: #7a858e; margin-top: -4px; }
+#chatPick { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 8px; }
+#chatPick button { color: #1d2328; border-color: #b8c2ca; background: #fff; text-align: left; border-radius: 10px; padding: 10px 14px; }
+#chatIn { display: flex; gap: 8px; align-items: center; background: #fff; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #d5dbe0; }
+#chatTyping { flex: 1; min-height: 1.4em; background: #f1f3f5; border-radius: 16px; padding: 6px 12px; }
+#chatIn b { color: #7a858e; font-weight: 500; font-size: 0.85rem; }
 </style>
 
 <div id="app">
@@ -50,6 +70,7 @@ button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
     <button id="startBtn">처음부터</button>
     <button id="stage2Btn">2단계(상가)부터</button>
     <button id="stage3Btn">3단계(서커스)부터</button>
+    <button id="stage4Btn">4단계(틈·엔딩)부터</button>
   </div>
   <div id="vn" class="layer" hidden><canvas id="vnCanvas" class="pix" width="135" height="240"></canvas></div>
   <img id="seoa" class="sprite" alt="서아" hidden>
@@ -57,13 +78,16 @@ button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
   <div id="labels" class="layer"></div>
   <div id="hint" hidden></div>
   <div id="box" hidden><div id="name"></div><div id="text"></div><div id="choices"></div></div>
+  <div id="chat" class="layer" hidden><div id="chatHead">서아</div><div id="chatLog"></div><div id="chatPick"></div><div id="chatIn"><span id="chatTyping"></span><b>보내기</b></div></div>
   <div id="flash" class="layer"></div>
   <div id="end" class="layer screen" hidden>
-    <h1>3단계 끝</h1>
-    <p>여기까지가 계단 0~4야.<br>어느 순간이 제일 이상했는지 기억해 둬.</p>
+    <h1>4단계 끝</h1>
+    <p>여기까지가 처음부터 엔딩까지야.<br>어느 순간이 제일 무서웠는지 기억해 둬.</p>
     <button id="againBtn">처음부터</button>
   </div>
 </div>
+<!-- 계단 5: 게임 밖에서 뜬 것처럼 보이는 대화상자. 게임 룩이 아니라 밝은 시스템 룩, 화면 전체를 덮는다 -->
+<div id="sysdlg" hidden><div class="card"><h2>페이지가 응답하지 않음</h2><p id="sysMsg"></p><div class="row"><button id="sysWait">기다리기</button><button id="sysReload">페이지 다시 로드</button></div></div></div>
 
 <!-- three.js: 계단 4 서커스 3D 장면을 그리려고 씀. r128은 전역 THREE를 주는 UMD 빌드 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -199,11 +223,11 @@ function drawBus(t) {
   poly([0, 240, 135, 240, 86, 136, 49, 136], "#1d5a3c");
   poly([0, 0, 49, 80, 49, 136, 0, 240], "#0f3a2c");
   poly([135, 0, 86, 80, 86, 136, 135, 240], "#12402f");
-  vx.fillStyle = "#2f7a52"; vx.fillRect(49, 80, 37, 56);
-  poly([135, 26, 86, 86, 86, 106, 135, 150], "#082219");
+  vx.fillStyle = vn.day ? "#a8d8e8" : "#2f7a52"; vx.fillRect(49, 80, 37, 56); // 앞 유리 (낮엔 하늘)
+  poly([135, 26, 86, 86, 86, 106, 135, 150], vn.day ? "#8fc8e0" : "#082219");
   vx.fillStyle = "#e8c86a";
   if (vn.flowing) vn.flow = (t / 4000) % 1;
-  cityDots.forEach(([u, v]) => {
+  if (!vn.day) cityDots.forEach(([u, v]) => {
     const d = (u + (vn.flow || 0)) % 1, x = 135 - d * 49, top = 26 + d * 60, bot = 150 - d * 44;
     vx.fillRect(Math.round(x), Math.round(top + v * (bot - top) * 0.5), 1, 1);
   });
@@ -233,9 +257,9 @@ function drawRoom(t) {
     vx.fillStyle = ((x + y) / 8) % 2 ? "#3f6b5c" : "#4a7a6a"; vx.fillRect(x, y, 8, 8);
   }
   // 앞쪽 유리창: 빗줄기, 창밖 정류장의 버스
-  vx.fillStyle = "#06140f"; vx.fillRect(4, 56, 40, 94);
+  vx.fillStyle = vn.day ? "#9fd4ea" : "#06140f"; vx.fillRect(4, 56, 40, 94); // 낮엔 파란 하늘
   if (vn.busOutside) { vx.fillStyle = "#1d3a30"; vx.fillRect(8, 108, 34, 14); vx.fillStyle = "#cfe8c0"; for (let x = 10; x < 40; x += 6) vx.fillRect(x, 110, 4, 5); }
-  vx.fillStyle = "rgba(160,200,180,0.35)"; for (let i = 0; i < 14; i++) { const x = 5 + ((i * 7 + t / 30) % 38), y = 57 + ((i * 13 + t / 9) % 90); vx.fillRect(Math.floor(x), Math.floor(y), 1, 3); }
+  vx.fillStyle = "rgba(160,200,180,0.35)"; if (!vn.day) for (let i = 0; i < 14; i++) { const x = 5 + ((i * 7 + t / 30) % 38), y = 57 + ((i * 13 + t / 9) % 90); vx.fillRect(Math.floor(x), Math.floor(y), 1, 3); }
   vx.fillStyle = "#2c4a40"; vx.fillRect(4, 56, 40, 2); vx.fillRect(4, 148, 40, 2); vx.fillRect(23, 56, 2, 94);
   // 건조기 두 대 (위), 세탁기 두 대 (아래). 오른쪽 아래 세탁기만 돈다.
   for (const x of [50, 74]) {
@@ -259,7 +283,7 @@ function drawRoom(t) {
   else { vx.fillStyle = "#8a9a92"; vx.fillRect(104, 100, 22, 64); vx.fillStyle = "#e8e2cc"; vx.fillRect(108, 108, 14, 5); vx.fillStyle = "#d0c090"; vx.fillRect(122, 132, 2, 2); }
   // 주황 벤치와 작은 서아 (큰 그림이 없을 때만)
   vx.fillStyle = "#c8742a"; vx.fillRect(14, 172, 80, 7); vx.fillStyle = "#8a4e1c"; vx.fillRect(18, 179, 3, 10); vx.fillRect(87, 179, 3, 10);
-  if (!vn.big) {
+  if (!vn.big && !vn.day) {
     vx.fillStyle = "#16110f"; vx.beginPath(); vx.arc(64, 156, 6, 0, Math.PI * 2); vx.fill();
     vx.fillStyle = "#e6d6c3"; vx.beginPath(); vx.ellipse(64, 158, 3.5, 4.5, 0, 0, Math.PI * 2); vx.fill();
     vx.fillStyle = "#4f5f7f"; vx.fillRect(58, 163, 12, 10);
@@ -285,7 +309,7 @@ function frame(t) {
     const y = Math.floor(Math.random() * 240), h = 2 + Math.floor(Math.random() * 6);
     vx.drawImage(vc, 0, y, 135, h, (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 5), y, 135, h);
   }
-  vx.fillStyle = "rgba(30,160,100,0.10)"; vx.fillRect(0, 0, 135, 240);
+  vx.fillStyle = vn.day ? "rgba(255,225,170,0.22)" : "rgba(30,160,100,0.10)"; vx.fillRect(0, 0, 135, 240); // 밤은 초록, 낮은 햇빛
   requestAnimationFrame(frame);
 }
 /** 화면 좌표 → 캔버스 좌표 (object-fit: cover로 잘린 만큼 보정). */
@@ -356,17 +380,18 @@ function hint(text, ms) { const h = $("hint"); h.textContent = text; h.hidden = 
 
 /* ===================== 계단 0: 밤 버스 (따뜻한 기저선) ===================== */
 const S = "서아";
+const RUN = { first: "그러게.", umbrella: null }; // 이번 판에서 고른 대답 (계단 5·엔딩이 기억해 냄)
 let stopEngine = null;
 /** 야근 뒤 막차. 사소한 대화와 첫 번째 '어?'. */
 async function stair0() {
   vn.scene = "bus"; stopEngine = startEngine();
   vn.face = "calm"; await say(S, visits > 0 ? "또 막차네, 우리." : "결국 막차네.");
   vn.face = "worry"; await say(S, "팀장님은 왜 꼭 여섯 시에 회의를 잡을까.");
-  const a = await choose(["그러게.", "내일도 그럴걸."]);
+  const a = await choose(["그러게.", "내일도 그럴걸."]); RUN.first = ["그러게.", "내일도 그럴걸."][a];
   if (a === 0) { vn.face = "smile"; await say(S, "그러게가 뭐야. 같이 욕해 줘야지."); }
   else { vn.face = "worry"; await say(S, "하지 마. 진짜 그럴 것 같잖아."); }
   vn.face = "calm"; await say(S, "아, 너 우산 있어? 밤에 비 온대.");
-  const b = await choose(["없어.", "있어."]);
+  const b = await choose(["없어.", "있어."]); RUN.umbrella = b;
   if (b === 0) { vn.face = "smile"; await say(S, "내 거 같이 쓰자. 작아서 어깨는 젖을 거야."); }
   else { vn.face = "smile"; await say(S, "다행이다. 나 없거든."); }
   vn.face = "calm"; await say(S, "……", { speed: 260 });
@@ -1408,8 +1433,7 @@ function stair4Circus() {
         W3.seoaMesh.material.map = W3.seoaTex.wrong; W3.seoaMesh.material.needsUpdate = true; W3.seoaMesh.visible = true;
         W3.lookTarget = W3.seoaMesh; await wait(1800); m2.stop();
         vn.face = "wrong"; await say(S, "자리에 앉아 주세요. 공연이 곧 시작합니다.", { speed: 70 });
-        W3.ended = true; buzz.stop(); $("world").hidden = true; box.hidden = true; vn.big = false;
-        await wait(1800); resolve();
+        W3.ended = true; buzz.stop(); await wait(400); resolve(); // 화면은 숨기지 않고 그대로 굳힌다 (계단 5가 이어받음)
       }),
     };
     W3.cut = true;
@@ -1438,19 +1462,162 @@ function fakeChoice(labels, forced) {
   });
 }
 
+/* ===================== 계단 5: 틈 (틀을 딱 한 번 깬다) ===================== */
+/** 한 음이 걸려서 계속 반복된다 (굳은 화면의 소리). 멈추는 함수를 돌려준다. */
+function startStuckNote() { const id = setInterval(() => blip(392, 0.05), 110); return () => clearInterval(id); }
+/** 게임 밖에서 뜬 것 같은 대화상자. 누른 버튼("wait" | "reload")을 돌려준다. */
+function sysDialog(msg, canWait) {
+  return new Promise((resolve) => {
+    $("sysMsg").textContent = msg; $("sysWait").hidden = !canWait; $("sysdlg").hidden = false;
+    $("sysWait").onclick = () => { $("sysdlg").hidden = true; resolve("wait"); };
+    $("sysReload").onclick = () => { $("sysdlg").hidden = true; resolve("reload"); };
+  });
+}
+let fakeStart = null; // 가짜 시작 화면에서 '처음부터'를 누르면 부르는 함수
+/** 계단 5: 화면이 굳음 → 오류 대화상자 → 가짜 다시 로드 → 익숙한 막차 → 기억하면 안 되는 걸 기억함 → 찢어짐. */
+async function stair5Gap() {
+  const title = document.title, stopNote = startStuckNote();
+  await wait(2600);
+  document.title = "자리에 앉아 주세요"; // 게임 밖(탭 제목)까지 번진다
+  let r = await sysDialog("이 페이지가 응답하지 않습니다. 기다리거나 페이지를 다시 로드할 수 있습니다.", true);
+  if (r === "wait") { await wait(1500); await sysDialog("자리에 앉아 주세요.", false); }
+  stopNote(); document.title = title;
+  // 가짜 다시 로드: 흰 화면 → 똑같은 시작 화면 (단계 버튼만 없다)
+  $("world").hidden = true; box.hidden = true; vn.big = false; $("vn").hidden = true;
+  const fl = $("flash"); fl.style.transition = "none"; fl.classList.add("on"); await wait(900);
+  ["stage2Btn", "stage3Btn", "stage4Btn"].forEach((id) => ($(id).hidden = true));
+  $("start").hidden = false; fl.classList.remove("on"); await wait(50); fl.style.transition = "";
+  await new Promise((go) => (fakeStart = go));
+  fakeStart = null; $("start").hidden = true;
+  // 익숙한 막차가 그대로 다시
+  Object.assign(vn, { scene: "bus", lightsOn: true, flowing: true, passenger: true, glitch: 0, day: false });
+  $("vn").hidden = false; const stop = startEngine();
+  vn.face = "calm"; await say(S, "또 막차네, 우리.");
+  vn.face = "worry"; await say(S, "팀장님은 왜 꼭 여섯 시에 회의를 잡을까.");
+  const a = await choose(["그러게.", "내일도 그럴걸."]);
+  if (a === 0) { vn.face = "smile"; await say(S, "그러게가 뭐야. 같이 욕해 줘야지."); }
+  else { vn.face = "worry"; await say(S, "하지 마. 진짜 그럴 것 같잖아."); }
+  vn.face = "calm"; await say(S, "아, 너 우산 있어? 밤에 비 온대.");
+  const u = await choose(["없어.", "있어."]);
+  await say(S, RUN.umbrella === null || RUN.umbrella === u ? "아까도 그렇게 대답했잖아." : `아까는 ${["없다", "있다"][RUN.umbrella]}며.`, { speed: 70 });
+  // 대화창이 혼자 돌기 시작한다
+  vn.big = false; nameEl.textContent = ""; textEl.classList.remove("narr"); textEl.textContent = ""; talk.waitTap = false;
+  const dr = ac.createOscillator(), dg = ac.createGain(), t0 = ac.currentTime;
+  dr.type = "sawtooth"; dr.frequency.setValueAtTime(55, t0); dr.frequency.linearRampToValueAtTime(150, t0 + 6);
+  dg.gain.setValueAtTime(0.0001, t0); dg.gain.exponentialRampToValueAtTime(0.18, t0 + 6); dr.connect(dg); dg.connect(master); dr.start();
+  const line = "다음은 수정교 정류장. ";
+  for (let i = 0, start = performance.now(); performance.now() - start < 6000; i++) {
+    const k = (performance.now() - start) / 6000;
+    textEl.textContent = (textEl.textContent + line[i % line.length]).slice(-90);
+    if (i % 2 === 0) blip(620 - k * 300, 0.025);
+    vn.glitch = k * 6; await wait(70 - k * 62);
+  }
+  // 뚝. 아무것도 없다
+  try { dr.stop(); } catch (e) {} stop(); vn.glitch = 0; vn.passenger = false;
+  box.hidden = true; vn.scene = "black"; await wait(3200);
+}
+
+/* ===================== 끝: 빠져나온 현실 (안심 → 작은 틈 → 열림) ===================== */
+/** 폰 진동 (부르르). */
+function vibrate() {
+  [0, 520].forEach((ms) => setTimeout(() => {
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = "square"; o.frequency.value = 150; g.gain.setValueAtTime(0.05, t); g.gain.setValueAtTime(0.0001, t + 0.35);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.4);
+  }, ms));
+}
+/** 아침 소리: 먼 차 소리와 가끔 새. 멈추는 함수를 돌려준다. */
+function startMorning() {
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noise(); s.loop = true; f.type = "lowpass"; f.frequency.value = 400; g.gain.value = 0.05; s.connect(f); f.connect(g); g.connect(master); s.start();
+  const id = setInterval(() => {
+    if (Math.random() < 0.5) return;
+    for (let i = 0; i < 2 + Math.random() * 3; i++) setTimeout(() => {
+      const o = ac.createOscillator(), og = ac.createGain(), t = ac.currentTime;
+      o.type = "sine"; o.frequency.setValueAtTime(2600, t); o.frequency.exponentialRampToValueAtTime(3900, t + 0.08);
+      og.gain.setValueAtTime(0.03, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1); o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.12);
+    }, i * 140);
+  }, 1700);
+  return () => { clearInterval(id); try { s.stop(); } catch (e) {} };
+}
+const chatLog = $("chatLog");
+/** 메신저에 한 줄 (who: "서아" | "me" | "t" 시간 | "read" 읽음). */
+function chatAdd(who, text) {
+  const d = document.createElement("div"); d.className = { me: "m me", t: "t", read: "read" }[who] || "m"; d.textContent = text;
+  chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight;
+}
+/** 서아가 잠깐 뜸 들였다가 보낸다. */
+async function chatSeoa(text, ms) { await wait(ms || 1400); [0, 90].forEach((d) => setTimeout(() => blip(1180, 0.03), d)); chatAdd("서아", text); }
+/** 입력 칸에 글자가 쳐지고 보내진다. */
+async function chatType(text) {
+  const ty = $("chatTyping");
+  for (let i = 1; i <= text.length; i++) { ty.textContent = text.slice(0, i); blip(760, 0.015); await wait(90); }
+  await wait(350); ty.textContent = ""; chatAdd("me", text);
+}
+/** 답장 고르기 → 입력 칸에 쳐지고 보내진다. 고른 번호를 돌려준다. */
+function chatChoose(labels) {
+  return new Promise((resolve) => {
+    const pick = $("chatPick"); pick.innerHTML = "";
+    labels.forEach((l, i) => {
+      const b = document.createElement("button"); b.id = "chat" + i; b.textContent = l;
+      b.onclick = async () => { pick.innerHTML = ""; await chatType(l); resolve(i); };
+      pick.appendChild(b);
+    });
+  });
+}
+/** 엔딩: 낮의 빨래방에서 깨어남 → 서아 메시지(합리적 설명) → 출근 버스 → 작은 틈 하나. */
+async function ending() {
+  vn.scene = "black"; $("vn").hidden = false; box.hidden = true;
+  await wait(1200); vibrate(); await wait(1700); vibrate(); await wait(1500);
+  Object.assign(vn, { scene: "room", day: true, washer: "stop", busOutside: false, doorOpen: false, paintingFigure: false, glitch: 0 });
+  const morning = startMorning();
+  await say("", "(눈을 뜬다. 빨래방 주황 벤치 위다.)");
+  await say("", "(유리문으로 아침 햇빛이 들어온다. 밖에서 차 소리, 새소리.)");
+  await say("", "(세탁기는 다 멈춰 있다. 서아는 없다.)");
+  vibrate(); await say("", "(폰이 또 울린다.)");
+  box.hidden = true; chatLog.innerHTML = ""; $("chat").hidden = false;
+  chatAdd("t", "오전 7:42");
+  await chatSeoa("일어났어?", 600);
+  await chatSeoa("어제 너 빨래방에서 잠들었잖아ㅋㅋ", 1500);
+  await chatSeoa("깨워도 안 일어나서 나 먼저 갔어. 미안ㅠ", 1700);
+  await chatSeoa("택시 겨우 잡았어. 배터리 1퍼에서 꺼짐", 1600);
+  const c = await chatChoose(["나 이상한 꿈 꿨어.", "괜찮아. 잘 들어갔어?"]);
+  if (c === 0) { await chatSeoa("무슨 꿈?", 1500); await chatSeoa("아 이따 얘기해 줘. 너 지각해", 1600); }
+  else await chatSeoa("응 ㅎㅎ 씻고 바로 잤어", 1500);
+  await chatSeoa("점심 내가 산다 했지. 12시에 1층!", 1700);
+  await chatChoose(["ㅇㅋ"]);
+  await wait(1200); $("chat").hidden = true; morning();
+  // 출근 버스 (서아 없음: small로 큰 그림을 안 띄운다)
+  Object.assign(vn, { scene: "bus", passenger: false, lightsOn: true, flowing: true });
+  const eng = startEngine();
+  await say("", "(출근 버스. 승객은 나 혼자다.)", { small: true });
+  await say("", "(햇빛이 따뜻하다. 어젯밤 일이 멀게 느껴진다.)", { small: true });
+  vibrate(); await say("", "(폰이 울린다.)", { small: true });
+  box.hidden = true; $("chat").hidden = false;
+  await chatSeoa("다음은 수정교 정류장.", 900);
+  await wait(1600); $("chat").hidden = true;
+  await say("안내 방송", "다음은 수정교, 수정교 정류장입니다.", { small: true });
+  box.hidden = true; $("chat").hidden = false; await wait(1500);
+  await chatType(RUN.first); await wait(900); chatAdd("read", "읽음"); await wait(4500); // 내가 안 쳤는데 보내진다
+  eng(); $("chat").hidden = true;
+}
+
 /* ===================== 흐름 ===================== */
-/** 처음부터 끝까지 (지금은 3단계: 계단 0~4). from=2면 상가부터, 3이면 서커스부터. */
+/** 처음부터 끝까지 (계단 0~5 + 엔딩). from=2면 상가부터, 3이면 서커스부터, 4면 틈부터. */
 async function main(from) {
+  if (from === 4) vn.scene = "black";
   $("vn").hidden = false; requestAnimationFrame(frame);
   if (from < 2) { await stair0(); await stair1Bus(); await stair1Room(); }
   $("flash").classList.remove("on");
   if (from < 3) { await stair2Mall(); await stair3Corridor(); }
   $("flash").classList.remove("on");
-  await stair4Circus();
+  if (from < 4) await stair4Circus();
+  await stair5Gap(); await ending();
   store.set("main-visits", visits + 1);
   box.hidden = true; $("vn").hidden = true; $("end").hidden = false; $("flash").classList.remove("on");
 }
-$("startBtn").addEventListener("click", () => { initAudio(); $("start").hidden = true; main(1); });
+$("startBtn").addEventListener("click", () => { if (fakeStart) return fakeStart(); initAudio(); $("start").hidden = true; main(1); });
+$("stage4Btn").addEventListener("click", () => { initAudio(); $("start").hidden = true; main(4); });
 $("stage2Btn").addEventListener("click", () => { initAudio(); $("start").hidden = true; main(2); });
 $("stage3Btn").addEventListener("click", () => { initAudio(); $("start").hidden = true; main(3); });
 $("againBtn").addEventListener("click", () => location.reload());
