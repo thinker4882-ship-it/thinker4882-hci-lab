@@ -345,9 +345,10 @@ function say(who, text, opts = {}) {
 function choose(labels) {
   return new Promise((resolve) => {
     box.hidden = false; nameEl.textContent = ""; textEl.textContent = ""; choicesEl.innerHTML = ""; talk.waitTap = false;
+    const shown = performance.now(); // 대사 넘기던 터치가 새 버튼에 그대로 들어가는 것(유령 클릭) 막기
     labels.forEach((l, i) => {
       const b = document.createElement("button"); b.id = "choice" + i; b.textContent = l;
-      b.addEventListener("click", () => { blip(880, 0.03); choicesEl.innerHTML = ""; resolve(i); });
+      b.addEventListener("click", () => { if (performance.now() - shown < 400) return; blip(880, 0.03); choicesEl.innerHTML = ""; resolve(i); });
       choicesEl.appendChild(b);
     });
   });
@@ -1449,10 +1450,11 @@ function stair4Circus() {
 function fakeChoice(labels, forced) {
   return new Promise((resolve) => {
     box.hidden = false; nameEl.textContent = ""; textEl.textContent = ""; choicesEl.innerHTML = ""; talk.waitTap = false;
+    const shown = performance.now(); // 유령 클릭 막기 (choose와 같음)
     const btns = labels.map((l, i) => {
       const b = document.createElement("button"); b.id = "choice" + i; b.textContent = l;
       b.addEventListener("click", () => {
-        if (choicesEl.dataset.done) return; choicesEl.dataset.done = "1";
+        if (performance.now() - shown < 400 || choicesEl.dataset.done) return; choicesEl.dataset.done = "1";
         b.style.borderColor = "var(--pick)"; blip(880, 0.03);
         setTimeout(() => { b.style.borderColor = ""; btns[forced].style.borderColor = "var(--pick)"; btns[forced].style.color = "var(--pick)"; blip(440, 0.03); }, 380);
         setTimeout(() => { choicesEl.innerHTML = ""; delete choicesEl.dataset.done; resolve(forced); }, 1300);
