@@ -326,9 +326,12 @@ function showPatterns(isEnd) {
     return `<li><b>${role}</b> 문단을 <b>${chosen}</b>(으)로 고른 일 ${n}번. ${PATTERN_TEXT[k] || ''}</li>`;
   });
   const cal = calibration(S.answers);
+  // 답은 맞았는데 단서는 못 가리킨 문항: 감으로 맞혔거나 다른 이유로 맞혔을 수 있다
+  const luckyRight = S.answers.filter(a => a.correct && !a.cueHit).length;
   document.getElementById('summary').innerHTML = `
     <h3>${isEnd ? '세션 끝' : `${S.count}문항 정리`}</h3>
     ${lines.length ? `<p>자주 틀리는 패턴</p><ul>${lines.join('')}</ul>` : '<p>아직 반복되는 오답 패턴이 없어요.</p>'}
+    ${luckyRight ? `<p class="hint">답은 맞았지만 단서는 못 가리킨 문항: ${luckyRight}개. 맞힌 이유가 정답의 이유와 같았는지 돌아보세요.</p>` : ''}
     <p class="hint">"확실"이라고 답한 문항 중 실제로 맞은 비율: ${cal[3] ?? '-'}</p>
     <div class="row">${isEnd ? '<button class="primary" id="btnHome">처음으로</button>' : '<button class="primary" id="btnGo">계속</button>'}</div>`;
   show('summary');
