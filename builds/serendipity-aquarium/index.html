@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>세렌디피티 수족관</title>
+<style>
+  /* 배치: 위에 두 판(사무실·아이디어 지도), 아래에 손잡이와 비교 실험 */
+  :root {
+    --bg:#f6f7f5; --panel:#ffffff; --ink:#1d2125; --sub:#5f6770; --line:#d9dde1;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --spark:#eb6834;
+    --wall:#9aa3ab; --plaza:#f3ead7;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#16181a; --panel:#1f2225; --ink:#eceeef; --sub:#a4acb4; --line:#353a3f;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --spark:#ff8a4c;
+    --wall:#6b747c; --plaza:#3a3428; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#16181a; --panel:#1f2225; --ink:#eceeef; --sub:#a4acb4; --line:#353a3f;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --spark:#ff8a4c;
+    --wall:#6b747c; --plaza:#3a3428; color-scheme:dark; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif; line-height:1.6; }
+  main { max-width:980px; margin:0 auto; padding-block:20px 60px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size:1.4rem; margin:0; text-wrap:balance; }
+  h2 { font-size:1.05rem; margin:0 0 6px; }
+  .sub { color:var(--sub); font-size:.92rem; }
+  .boards { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin:16px 0; }
+  .board { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; min-width:0; }
+  canvas { display:block; width:100%; height:auto; }
+  .stats { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.88rem; color:var(--sub); margin-top:8px; font-variant-numeric:tabular-nums; }
+  .stats b { color:var(--ink); }
+  .controls { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px 18px; }
+  label { font-size:.88rem; display:flex; flex-direction:column; gap:2px; }
+  label span.v { color:var(--sub); font-variant-numeric:tabular-nums; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
+  button { font:inherit; font-size:.9rem; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; }
+  button.primary { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--s1); outline-offset:2px; }
+  .hint { font-size:.85rem; color:var(--sub); }
+  .charts { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:.85rem; margin:6px 0; }
+  .legend i { display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums; margin-top:10px; }
+  td, th { border-bottom:1px solid var(--line); padding:4px 8px; text-align:right; }
+  td:first-child, th:first-child { text-align:left; }
+  .tip { position:fixed; pointer-events:none; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:.8rem; font-variant-numeric:tabular-nums; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+</style>
+</head>
+<body>
+<main>
+  <h1>세렌디피티 수족관</h1>
+  <div class="sub">사람들이 사무실을 돌아다니다 만나면 해법을 따라 하거나, 섞어서 새 해법을 만듭니다(불꽃). 연결 방식을 바꾸면 집단이 문제를 얼마나 잘 푸는지 봅니다.</div>
+
+  <div class="boards">
+    <div class="board">
+      <h2>사무실</h2>
+      <canvas id="office" width="440" height="440" aria-label="사무실: 방, 통로, 광장과 돌아다니는 사람들"></canvas>
+      <div class="hint">점의 색 = 들고 있는 해법의 위치. 색이 같아지면 생각이 같아진 것.</div>
+    </div>
+    <div class="board">
+      <h2>아이디어 지도</h2>
+      <canvas id="idea" width="440" height="440" aria-label="아이디어 지도: 진할수록 좋은 해법"></canvas>
+      <div class="hint">진할수록 높은 점수. 봉우리가 여럿이라 가까운 곳만 보면 작은 봉우리에 갇힙니다.</div>
+    </div>
+  </div>
+  <div class="stats" id="liveStats"></div>
+
+  <!-- 손잡이 (기획: 바꿀 것) -->
+  <div class="controls" style="margin-top:12px">
+    <label for="rooms">방 개수 <span class="v" id="roomsV"></span>
+      <input type="range" id="rooms" min="0" max="2" step="1" value="2"></label>
+    <label for="corridor">통로 (방 밖으로 나가는 빈도) <span class="v" id="corridorV"></span>
+      <input type="range" id="corridor" min="0" max="10" step="1" value="2"></label>
+    <label for="solo">리듬 (혼자 생각하는 시간 비율) <span class="v" id="soloV"></span>
+      <input type="range" id="solo" min="0" max="90" step="10" value="0"></label>
+    <label for="plaza" style="flex-direction:row; align-items:center; gap:6px">
+      <input type="checkbox" id="plaza"> 광장 (나가면 가운데 광장으로 모임)</label>
+  </div>
+  <div class="row">
+    <button class="primary" id="btnPlay">일시정지</button>
+    <button id="btnShake">지형 흔들기</button>
+    <button id="btnReset">처음부터</button>
+    <span class="hint">장면:</span>
+    <button data-preset="0">칸막이 사무실</button>
+    <button data-preset="1">완전 개방</button>
+    <button data-preset="2">통로·광장</button>
+    <button data-preset="3">개방 + 리듬</button>
+  </div>
+
+  <!-- 비교 실험 (기획: 진단 → 처방 → 전후 비교) -->
+  <div class="board" style="margin-top:18px">
+    <h2>비교 실험</h2>
+    <div class="hint">네 장면을 같은 지형에서 3,000틱씩 돌리고, 1,500틱에 지형을 흔듭니다. 지형 24개로 반복해 평균을 냅니다 (8개로는 지형 운에 따라 순위가 뒤바뀌었어요).</div>
+    <div class="row"><button class="primary" id="btnCompare">비교 실험 돌리기</button><span class="hint" id="cmpMsg"></span></div>
+    <div class="legend" id="legend"></div>
+    <div class="charts">
+      <div><div class="hint">평균 점수 (집단이 들고 있는 해법의 평균 높이)</div><canvas id="chMean" width="460" height="260"></canvas></div>
+      <div><div class="hint">살아남은 서로 다른 해법 수</div><canvas id="chDiv" width="460" height="260"></canvas></div>
+    </div>
+    <div class="tablewrap" id="cmpTable"></div>
+  </div>
+</main>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+// SIM-START ===== 시뮬레이션 핵심 (화면 없이도 돈다: node 점검용) =====
+/** 시드가 같으면 같은 난수를 내는 생성기 (mulberry32, 공개 도메인 알고리즘) */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+/** 정규분포 난수 */
+function gauss(rng) { return Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng()); }
+const clamp01 = v => Math.min(1, Math.max(0, v));
+
+// 모형의 값들. 근거는 README "얼개"
+const P = {
+  N: 60,            // 사람 수
+  meetR: 0.035,     // 이만큼 가까우면 만난다 (사무실 좌표)
+  cooldown: 15,     // 한 번 만나면 이만큼 쉬었다 다시 만난다
+  soloRate: 0.1,    // 매 틱 혼자 탐색할 확률
+  soloStep: 0.02,   // 혼자 탐색의 보폭 (가까운 곳만 본다)
+  copyNoise: 0.01,  // 따라 할 때 생기는 작은 오차
+  farD: 0.45,       // 해법이 이보다 멀면 서로 이해 못 한다 (역U자의 오른쪽 끝)
+  sparkD: 0.22,     // 불꽃이 가장 잘 튀는 거리 (역U자의 꼭대기)
+  sparkW: 0.08,     // 역U자의 폭
+  sparkMax: 0.5,    // 꼭대기에서 섞기를 시도할 확률
+  cycle: 200,       // 리듬 한 주기 (틱)
+  speed: 0.004,     // 걷는 속도
+  stay: 60,         // 밖에 나가 머무는 시간
+};
+
+// ===== 1. 아이디어 지도 (봉우리가 여럿인 지형) =====
+/** 가우스 봉우리 여러 개를 더해 울퉁불퉁한 지형을 만든다. 최고점이 1이 되도록 맞춘다 */
+function makeLandscape(rng, k = 16) {
+  const peaks = [];
+  for (let i = 0; i < k; i++) peaks.push({ x: rng(), y: rng(), h: 0.3 + 0.7 * rng(), w: 0.04 + 0.06 * rng() });
+  const L = { peaks, max: 1 };
+  let m = 0;
+  for (let i = 0; i <= 80; i++) for (let j = 0; j <= 80; j++) m = Math.max(m, rawHeight(L, i / 80, j / 80));
+  L.max = m;
+  return L;
+}
+/** 정규화 전 높이 */
+function rawHeight(L, x, y) { let s = 0; for (const p of L.peaks) { const dx = x - p.x, dy = y - p.y; s += p.h * Math.exp(-(dx * dx + dy * dy) / (2 * p.w * p.w)); } return s; }
+/** 해법 (x, y)의 점수: 0~1 */
+function height(L, x, y) { return rawHeight(L, x, y) / L.max; }
+
+// ===== 2. 사무실 (방·통로·광장) =====
+/** 방 n×n 격자와 광장을 만든다 */
+function makeOffice(rooms, plaza) {
+  const n = Math.round(Math.sqrt(rooms)), cells = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) cells.push({ x0: c / n, y0: r / n, x1: (c + 1) / n, y1: (r + 1) / n });
+  return { n, cells, plaza: plaza ? { x: 0.5, y: 0.5, r: 0.11 } : null };
+}
+/** 사무실 위치가 어느 칸인지: 광장 안이면 -1 */
+function cellOf(O, x, y) {
+  if (O.plaza && Math.hypot(x - O.plaza.x, y - O.plaza.y) < O.plaza.r) return -1;
+  return Math.min(O.n - 1, Math.floor(y * O.n)) * O.n + Math.min(O.n - 1, Math.floor(x * O.n));
+}
+/** 방 안의 아무 점 */
+function pointIn(cell, rng) { const m = 0.03; return [cell.x0 + m + rng() * (cell.x1 - cell.x0 - 2 * m), cell.y0 + m + rng() * (cell.y1 - cell.y0 - 2 * m)]; }
+
+// ===== 3. 사람과 규칙 =====
+/** 세계 하나를 만든다: 지형, 사무실, 사람들 */
+function makeWorld(cfg, seed) {
+  const rng = mulberry32(seed), L = makeLandscape(rng), O = makeOffice(cfg.rooms, cfg.plaza);
+  const agents = [];
+  for (let i = 0; i < P.N; i++) {
+    const home = i % O.cells.length, [ox, oy] = pointIn(O.cells[home], rng);
+    const sx = rng(), sy = rng();
+    agents.push({ ox, oy, h: rng() * 6.283, home, state: 'home', tx: 0, ty: 0, t: 0, sx, sy, score: height(L, sx, sy), cd: 0 });
+  }
+  const visited = new Set();
+  return { cfg, rng, L, O, agents, tick: 0, sparks: 0, bigSparks: 0, events: [], visited };
+}
+/** 한 사람을 한 틱 움직인다: 방 안을 거닐다 가끔 밖(다른 방이나 광장)에 나갔다 돌아온다 */
+function move(W, a) {
+  const { O, rng, cfg } = W, home = O.cells[a.home];
+  if (a.state === 'home') {
+    // 방향을 조금씩 틀며 걷고 벽에 닿으면 튕긴다: 제자리걸음이면 늘 같은 이웃만 만나 개방형도 사실상 칸막이가 된다
+    a.h += gauss(rng) * 0.3;
+    a.ox += Math.cos(a.h) * P.speed; a.oy += Math.sin(a.h) * P.speed;
+    if (a.ox < home.x0 + 0.02 || a.ox > home.x1 - 0.02) { a.h = Math.PI - a.h; a.ox = Math.min(home.x1 - 0.02, Math.max(home.x0 + 0.02, a.ox)); }
+    if (a.oy < home.y0 + 0.02 || a.oy > home.y1 - 0.02) { a.h = -a.h; a.oy = Math.min(home.y1 - 0.02, Math.max(home.y0 + 0.02, a.oy)); }
+    if (rng() < cfg.corridor && (O.cells.length > 1 || O.plaza)) {
+      if (O.plaza) { const ang = rng() * 6.283, r = rng() * O.plaza.r * 0.8; a.tx = O.plaza.x + Math.cos(ang) * r; a.ty = O.plaza.y + Math.sin(ang) * r; }
+      else { let k = a.home; while (k === a.home) k = Math.floor(rng() * O.cells.length); [a.tx, a.ty] = pointIn(O.cells[k], rng); }
+      a.state = 'out';
+    }
+  } else if (a.state === 'out' || a.state === 'back') {
+    const dx = a.tx - a.ox, dy = a.ty - a.oy, d = Math.hypot(dx, dy), v = P.speed * 2;
+    if (d < v) { a.ox = a.tx; a.oy = a.ty; if (a.state === 'out') { a.state = 'stay'; a.t = P.stay; } else a.state = 'home'; }
+    else { a.ox += dx / d * v; a.oy += dy / d * v; }
+  } else if (a.state === 'stay') {
+    a.ox = clamp01(a.ox + (rng() - 0.5) * P.speed * 2); a.oy = clamp01(a.oy + (rng() - 0.5) * P.speed * 2);
+    if (--a.t <= 0) { [a.tx, a.ty] = pointIn(home, W.rng); a.state = 'back'; }
+  }
+}
+/** 혼자 탐색: 내 해법 주변을 조금 둘러보고 나아지면 옮긴다 */
+function soloSearch(W, a) {
+  const x = clamp01(a.sx + gauss(W.rng) * P.soloStep), y = clamp01(a.sy + gauss(W.rng) * P.soloStep), h = height(W.L, x, y);
+  if (h > a.score) { a.sx = x; a.sy = y; a.score = h; }
+}
+/** 두 사람이 만났을 때: 너무 멀면 무시, 적당하면 섞기(불꽃) 시도, 아니면 더 나은 쪽을 따라 한다 */
+function meet(W, a, b) {
+  const { rng, L } = W, d = Math.hypot(a.sx - b.sx, a.sy - b.sy);
+  if (d > P.farD) return null; // 서로 이해 못 함
+  const ps = P.sparkMax * Math.exp(-((d - P.sparkD) ** 2) / (2 * P.sparkW ** 2)); // 역U자
+  if (rng() < ps) {
+    // 섞기: 한 사람의 x와 다른 사람의 y를 합친다 (두 해법의 요소를 바꿔 끼우기)
+    const c1 = [clamp01(a.sx + gauss(rng) * 0.01), clamp01(b.sy + gauss(rng) * 0.01)], c2 = [clamp01(b.sx + gauss(rng) * 0.01), clamp01(a.sy + gauss(rng) * 0.01)];
+    const h1 = height(L, c1[0], c1[1]), h2 = height(L, c2[0], c2[1]);
+    let [c, h] = h1 > h2 ? [c1, h1] : [c2, h2];
+    // 섞은 아이디어를 둘이 함께 조금 다듬는다 (가까운 곳 5번 둘러보기)
+    for (let k = 0; k < 5; k++) {
+      const x = clamp01(c[0] + gauss(rng) * P.soloStep), y = clamp01(c[1] + gauss(rng) * P.soloStep), hh = height(L, x, y);
+      if (hh > h) { c = [x, y]; h = hh; }
+    }
+    if (h > Math.max(a.score, b.score)) { // 둘 중 누구보다도 나은 새 해법 = 창발
+      for (const p of [a, b]) { p.sx = c[0]; p.sy = c[1]; p.score = h; }
+      W.sparks++; if (d > P.sparkD) W.bigSparks++;
+      return { type: 'spark', ox: (a.ox + b.ox) / 2, oy: (a.oy + b.oy) / 2, sx: c[0], sy: c[1] };
+    }
+  }
+  const [hi, lo] = a.score >= b.score ? [a, b] : [b, a];
+  if (hi.score > lo.score + 1e-6) {
+    const x = clamp01(hi.sx + gauss(rng) * P.copyNoise), y = clamp01(hi.sy + gauss(rng) * P.copyNoise);
+    lo.sx = x; lo.sy = y; lo.score = height(L, x, y);
+    return { type: 'copy' };
+  }
+  return null;
+}
+/** 지금이 혼자 생각하는 시간인지 (리듬) */
+function isSoloPhase(W) { return W.cfg.solo > 0 && (W.tick % P.cycle) / P.cycle < W.cfg.solo; }
+/** 세계를 한 틱 진행한다 */
+function step(W) {
+  const A = W.agents;
+  for (const a of A) { move(W, a); if (a.cd > 0) a.cd--; if (W.rng() < P.soloRate) soloSearch(W, a); }
+  if (!isSoloPhase(W)) {
+    const cells = A.map(a => cellOf(W.O, a.ox, a.oy));
+    for (let i = 0; i < A.length; i++) {
+      if (A[i].cd) continue;
+      for (let j = i + 1; j < A.length; j++) {
+        if (A[j].cd || cells[i] !== cells[j]) continue; // 벽 너머로는 못 만난다
+        if (Math.hypot(A[i].ox - A[j].ox, A[i].oy - A[j].oy) > P.meetR) continue;
+        const ev = meet(W, A[i], A[j]);
+        A[i].cd = A[j].cd = P.cooldown;
+        if (ev && ev.type === 'spark') W.events.push({ ...ev, t: W.tick });
+        break;
+      }
+    }
+  }
+  for (const a of A) W.visited.add(Math.floor(a.sx * 25) * 25 + Math.floor(a.sy * 25));
+  W.tick++;
+}
+/** 지형 흔들기: 문제가 바뀐다. 사람들은 들고 있던 해법 그대로 새 지형에 놓인다 */
+function shake(W) { W.L = makeLandscape(W.rng); for (const a of W.agents) a.score = height(W.L, a.sx, a.sy); W.visited.clear(); }
+
+// ===== 4. 측정 =====
+/** 살아남은 서로 다른 해법 수: 반경 0.04 안의 해법은 같은 해법으로 친다 */
+function distinctSolutions(A) {
+  const centers = [];
+  for (const a of A) if (!centers.some(c => Math.hypot(c[0] - a.sx, c[1] - a.sy) < 0.04)) centers.push([a.sx, a.sy]);
+  return centers.length;
+}
+/** 지금 상태를 숫자로 */
+function measure(W) {
+  const s = W.agents.map(a => a.score);
+  return { mean: s.reduce((x, y) => x + y, 0) / s.length, best: Math.max(...s), distinct: distinctSolutions(W.agents), coverage: W.visited.size / 625, sparks: W.sparks };
+}
+// 비교 실험에 쓰는 네 장면 (기획: 진단할 조건)
+const PRESETS = [
+  { name: '칸막이 사무실', rooms: 9, corridor: 0.0005, plaza: false, solo: 0 },
+  { name: '완전 개방', rooms: 1, corridor: 0, plaza: false, solo: 0 },
+  { name: '통로·광장', rooms: 9, corridor: 0.004, plaza: true, solo: 0 },
+  { name: '개방 + 리듬', rooms: 1, corridor: 0, plaza: false, solo: 0.7 },
+];
+/** 화면 없이 한 장면을 끝까지 돌려 기록을 낸다 */
+function runHeadless(cfg, seed, T = 3000, shakeAt = 1500, every = 20) {
+  const W = makeWorld(cfg, seed), out = [];
+  for (let t = 0; t < T; t++) { if (t === shakeAt) shake(W); step(W); if (t % every === 0) out.push({ t, ...measure(W) }); }
+  return out;
+}
+/** 여러 지형으로 반복해 평균 곡선을 낸다 */
+function compare(seeds = 24,T = 3000, shakeAt = 1500) {
+  return PRESETS.map(cfg => {
+    const runs = [];
+    for (let s = 0; s < seeds; s++) runs.push(runHeadless(cfg, 1000 + s, T, shakeAt));
+    return { name: cfg.name, series: runs[0].map((r, i) => {
+      const avg = k => runs.reduce((x, run) => x + run[i][k], 0) / runs.length;
+      return { t: r.t, mean: avg('mean'), best: avg('best'), distinct: avg('distinct'), sparks: avg('sparks') };
+    }) };
+  });
+}
+// SIM-END
+
+// ===== 5. 화면 =====
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ROOMS = [1, 4, 9];
+let W, playing = true, heat = null;
+
+/** 손잡이 값을 장면 설정으로 읽는다 */
+function readCfg() {
+  return { rooms: ROOMS[+$('rooms').value], corridor: +$('corridor').value * 0.001, plaza: $('plaza').checked, solo: +$('solo').value / 100 };
+}
+/** 손잡이 옆 숫자를 갱신한다 */
+function showValues() {
+  const c = readCfg();
+  $('roomsV').textContent = `${c.rooms}개`;
+  $('corridorV').textContent = c.corridor ? `틱당 ${(c.corridor * 100).toFixed(1)}%` : '없음';
+  $('soloV').textContent = c.solo ? `${Math.round(c.solo * 100)}% (주기 ${P.cycle}틱)` : '없음 (늘 만남)';
+}
+/** 손잡이를 바꾸면 사람과 지형은 그대로 두고 사무실만 바꾼다 */
+function applyCfg() {
+  showValues();
+  const c = readCfg();
+  W.cfg = c;
+  if (W.O.cells.length !== c.rooms || !!W.O.plaza !== c.plaza) {
+    W.O = makeOffice(c.rooms, c.plaza);
+    for (const a of W.agents) { a.home = W.agents.indexOf(a) % W.O.cells.length; [a.ox, a.oy] = pointIn(W.O.cells[a.home], W.rng); a.state = 'home'; }
+  }
+}
+/** 처음부터 다시 */
+function reset() { W = makeWorld(readCfg(), Math.floor(Math.random() * 1e9)); heat = null; showValues(); }
+/** 장면 버튼: 손잡이를 그 장면 값으로 맞춘다 */
+function loadPreset(i) {
+  const p = PRESETS[i];
+  $('rooms').value = ROOMS.indexOf(p.rooms); $('corridor').value = Math.round(p.corridor * 1000); $('solo').value = Math.round(p.solo * 100); $('plaza').checked = p.plaza;
+  applyCfg();
+}
+/** 해법 위치 → 색 (지도 위 각도로 색상, 가운데 가까울수록 옅게) */
+function solColor(a) {
+  const hue = (Math.atan2(a.sy - 0.5, a.sx - 0.5) / (2 * Math.PI) * 360 + 360) % 360;
+  const sat = 25 + 60 * Math.min(1, Math.hypot(a.sx - 0.5, a.sy - 0.5) / 0.5);
+  return `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% 50%)`;
+}
+/** 지형을 한 번 그려 둔다 (흔들 때만 다시) */
+function buildHeat(cv) {
+  const S = 110, img = new ImageData(S, S), lo = [238, 244, 252], hi = [13, 54, 107];
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const h = height(W.L, i / S, j / S), k = (j * S + i) * 4;
+    for (let c = 0; c < 3; c++) img.data[k + c] = lo[c] + (hi[c] - lo[c]) * h;
+    img.data[k + 3] = 255;
+  }
+  const off = document.createElement('canvas'); off.width = off.height = S; off.getContext('2d').putImageData(img, 0, 0);
+  return off;
+}
+/** 사무실 판을 그린다 */
+function drawOffice() {
+  const cv = $('office'), g = cv.getContext('2d'), S = cv.width, O = W.O;
+  g.fillStyle = css('--panel'); g.fillRect(0, 0, S, S);
+  if (O.plaza) { g.fillStyle = css('--plaza'); g.beginPath(); g.arc(O.plaza.x * S, O.plaza.y * S, O.plaza.r * S, 0, 6.283); g.fill(); }
+  g.strokeStyle = css('--wall'); g.lineWidth = 2;
+  const door = W.cfg.corridor > 0 ? 0.06 : 0;
+  for (let k = 1; k < O.n; k++) for (let m = 0; m < O.n; m++) {
+    const p = k / O.n, a = m / O.n, b = (m + 1) / O.n, mid = (a + b) / 2;
+    for (const [x0, y0, x1, y1] of [[p, a, p, mid - door / 2], [p, mid + door / 2, p, b], [a, p, mid - door / 2, p], [mid + door / 2, p, b, p]]) {
+      g.beginPath(); g.moveTo(x0 * S, y0 * S); g.lineTo(x1 * S, y1 * S); g.stroke();
+    }
+  }
+  g.strokeRect(1, 1, S - 2, S - 2);
+  for (const a of W.agents) { g.fillStyle = solColor(a); g.beginPath(); g.arc(a.ox * S, a.oy * S, 5, 0, 6.283); g.fill(); }
+  drawSparks(g, S, 'ox', 'oy');
+  if (isSoloPhase(W)) { g.fillStyle = css('--sub'); g.font = '13px sans-serif'; g.fillText('혼자 생각하는 시간', 8, 18); }
+}
+/** 최근 불꽃을 그린다 (40틱 동안 퍼지며 사라짐) */
+function drawSparks(g, S, kx, ky) {
+  g.strokeStyle = css('--spark');
+  for (const e of W.events) {
+    const age = W.tick - e.t; if (age > 40) continue;
+    g.globalAlpha = 1 - age / 40; g.lineWidth = 2;
+    g.beginPath(); g.arc(e[kx] * S, e[ky] * S, 6 + age * 0.5, 0, 6.283); g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+/** 아이디어 지도 판을 그린다 */
+function drawIdea() {
+  const cv = $('idea'), g = cv.getContext('2d'), S = cv.width;
+  if (!heat) heat = buildHeat(cv);
+  g.imageSmoothingEnabled = true; g.drawImage(heat, 0, 0, S, S);
+  for (const a of W.agents) {
+    g.fillStyle = solColor(a); g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(a.sx * S, a.sy * S, 4.5, 0, 6.283); g.fill(); g.stroke();
+  }
+  drawSparks(g, S, 'sx', 'sy');
+}
+/** 판 아래 숫자 */
+function drawStats() {
+  const m = measure(W);
+  $('liveStats').innerHTML = `<span>틱 <b>${W.tick}</b></span><span>평균 점수 <b>${m.mean.toFixed(2)}</b></span><span>최고 점수 <b>${m.best.toFixed(2)}</b></span><span>살아남은 해법 <b>${m.distinct}</b>개</span><span>불꽃 <b>${W.sparks}</b>번 (먼 조합 ${W.bigSparks})</span>`;
+}
+/** 애니메이션: 프레임마다 2틱 */
+function loop() {
+  if (playing) { step(W); step(W); W.events = W.events.filter(e => W.tick - e.t <= 40); }
+  drawOffice(); drawIdea(); drawStats();
+  requestAnimationFrame(loop);
+}
+
+// ===== 6. 비교 차트 =====
+let CMP = null;
+/** 선 그래프: 여러 장면을 한 축에, 흔든 시점에 점선, 끝에 이름표 */
+function drawChart(cv, key, yMax, hoverT) {
+  const g = cv.getContext('2d'), Wd = cv.width, H = cv.height, pad = { l: 34, r: 92, t: 10, b: 24 };
+  const cols = ['--s1', '--s2', '--s3', '--s4'].map(css), T = CMP[0].series.at(-1).t;
+  const X = t => pad.l + (Wd - pad.l - pad.r) * t / T, Y = v => H - pad.b - (H - pad.t - pad.b) * v / yMax;
+  g.fillStyle = css('--panel'); g.fillRect(0, 0, Wd, H);
+  g.strokeStyle = css('--line'); g.fillStyle = css('--sub'); g.font = '11px sans-serif'; g.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const v = yMax * i / 4, y = Y(v); g.beginPath(); g.moveTo(pad.l, y); g.lineTo(Wd - pad.r, y); g.stroke(); g.fillText(key === 'mean' ? v.toFixed(2) : v.toFixed(0), 2, y + 4); }
+  for (const t of [0, 1500, 3000]) g.fillText(t, X(t) - 10, H - 6);
+  g.setLineDash([4, 4]); g.strokeStyle = css('--sub'); g.beginPath(); g.moveTo(X(1500), pad.t); g.lineTo(X(1500), H - pad.b); g.stroke(); g.setLineDash([]);
+  g.fillText('지형 흔들기', X(1500) + 4, pad.t + 10);
+  const ends = CMP.map((c, i) => ({ i, y: Y(c.series.at(-1)[key]) })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 13); // 이름표 겹침 피하기
+  CMP.forEach((c, i) => {
+    g.strokeStyle = cols[i]; g.lineWidth = 2; g.beginPath();
+    c.series.forEach((r, k) => k ? g.lineTo(X(r.t), Y(r[key])) : g.moveTo(X(r.t), Y(r[key]))); g.stroke();
+  });
+  g.fillStyle = css('--ink');
+  for (const e of ends) g.fillText(CMP[e.i].name, Wd - pad.r + 6, e.y + 4);
+  if (hoverT != null) { g.strokeStyle = css('--sub'); g.beginPath(); g.moveTo(X(hoverT), pad.t); g.lineTo(X(hoverT), H - pad.b); g.stroke(); }
+  cv._X = X; cv._pad = pad; cv._T = T;
+}
+/** 비교 결과를 그린다: 차트 두 개, 범례, 표 */
+function renderCompare(hoverT) {
+  drawChart($('chMean'), 'mean', 1, hoverT); drawChart($('chDiv'), 'distinct', 40, hoverT);
+  $('legend').innerHTML = CMP.map((c, i) => `<span><i style="background:var(--s${i + 1})"></i>${c.name}</span>`).join('');
+  const at = (c, t) => c.series.reduce((b, r) => Math.abs(r.t - t) < Math.abs(b.t - t) ? r : b);
+  $('cmpTable').innerHTML = `<table><tr><th>장면</th><th>흔들기 직전 평균</th><th>흔들고 200틱 뒤</th><th>끝 평균</th><th>끝 최고</th><th>끝 해법 수</th><th>불꽃(누적)</th></tr>` +
+    CMP.map(c => `<tr><td>${c.name}</td><td>${at(c, 1480).mean.toFixed(2)}</td><td>${at(c, 1700).mean.toFixed(2)}</td><td>${at(c, 2980).mean.toFixed(2)}</td><td>${at(c, 2980).best.toFixed(2)}</td><td>${at(c, 2980).distinct.toFixed(1)}</td><td>${at(c, 2980).sparks.toFixed(0)}</td></tr>`).join('') + '</table>';
+}
+/** 차트 위에 마우스를 올리면 그 시점의 값을 보여 준다 */
+function hoverChart(e) {
+  if (!CMP) return;
+  const cv = e.currentTarget, r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * cv.width / r.width;
+  const t = Math.max(0, Math.min(cv._T, (x - cv._pad.l) / (cv.width - cv._pad.l - cv._pad.r) * cv._T));
+  const row = c => c.series.reduce((b, s) => Math.abs(s.t - t) < Math.abs(b.t - t) ? s : b);
+  const near = row(CMP[0]).t;
+  renderCompare(near);
+  const tip = $('tip'); tip.hidden = false; tip.style.left = (e.clientX + 12) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+  tip.innerHTML = `<b>${near}틱</b><br>` + CMP.map((c, i) => `<span style="color:var(--s${i + 1})">●</span> ${c.name}: 평균 ${row(c).mean.toFixed(2)}, 해법 ${row(c).distinct.toFixed(1)}`).join('<br>');
+}
+for (const id of ['chMean', 'chDiv']) { $(id).addEventListener('mousemove', hoverChart); $(id).addEventListener('mouseleave', () => { $('tip').hidden = true; if (CMP) renderCompare(); }); }
+
+$('btnCompare').onclick = () => {
+  $('cmpMsg').textContent = '계산 중… (몇 초 걸려요)';
+  setTimeout(() => { const t0 = performance.now(); CMP = compare(); renderCompare(); $('cmpMsg').textContent = `완료 (${((performance.now() - t0) / 1000).toFixed(1)}초)`; }, 30);
+};
+$('btnPlay').onclick = () => { playing = !playing; $('btnPlay').textContent = playing ? '일시정지' : '재생'; };
+$('btnShake').onclick = () => { shake(W); heat = null; };
+$('btnReset').onclick = reset;
+for (const id of ['rooms', 'corridor', 'solo', 'plaza']) $(id).addEventListener('input', applyCfg);
+document.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => loadPreset(+b.dataset.preset));
+
+reset(); loadPreset(2); loop();
+</script>
+</body>
+</html>

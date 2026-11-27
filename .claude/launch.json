@@ -3,6 +3,7 @@
   "configurations": [
     { "name": "woa", "runtimeExecutable": "py", "runtimeArgs": ["-m", "http.server", "8765", "--directory", "loops/02-woa"], "port": 8765 },
     { "name": "paragraph-roles", "runtimeExecutable": "py", "runtimeArgs": ["-m", "http.server", "8766", "--directory", "builds/paragraph-roles"], "port": 8766 },
-    { "name": "circus-v3", "runtimeExecutable": "py", "runtimeArgs": ["-m", "http.server", "8767", "--directory", "builds/digital-circus/v3"], "port": 8767 }
+    { "name": "circus-v3", "runtimeExecutable": "py", "runtimeArgs": ["-m", "http.server", "8767", "--directory", "builds/digital-circus/v3"], "port": 8767 },
+    { "name": "aquarium", "runtimeExecutable": "py", "runtimeArgs": ["-m", "http.server", "8768", "--directory", "builds/serendipity-aquarium"], "port": 8768 }
   ]
 }
