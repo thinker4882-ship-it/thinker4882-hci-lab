@@ -406,12 +406,16 @@ function showStats() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(loadLog(), null, 1)], { type: 'application/json' }));
     a.download = 'paragraph-roles-log.json'; a.click();
+    // 휴대폰·원격 화면에서는 내려받기가 막힐 수 있어, 복사해서 붙일 수 있게 글로도 보여 준다
+    const box = document.getElementById('exportText') || document.getElementById('stats').appendChild(Object.assign(document.createElement('textarea'), { id: 'exportText', rows: 8, style: 'width:100%' }));
+    box.value = JSON.stringify(loadLog()); box.select();
   };
 }
 /** 첫 연습 뒤 이틀이 지났을 때만 재시험을 연다 */
 function retestReady() {
   const firstPractice = loadLog().find(r => r.set === 'practice');
-  if (!firstPractice) return { ok: false, msg: '재시험은 첫 연습 이틀 뒤에 열려요.' };
+  // 다른 기기(원격)에서는 연습 기록이 없으므로 재시험을 바로 연다
+  if (!firstPractice) return { ok: true, msg: '이 기기에는 연습 기록이 없어요. 연습을 다른 기기에서 했다면 재시험을 바로 볼 수 있어요.' };
   const days = (Date.now() - firstPractice.ts) / 86400000;
   const done = loadLog().some(r => r.set === 'retest');
   if (days < 2) return { ok: false, msg: `재시험까지 ${Math.ceil((2 - days) * 24)}시간 남았어요.` };
