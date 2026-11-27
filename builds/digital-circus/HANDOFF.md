@@ -227,3 +227,4 @@ curl -o assets/corridor.png "https://d8j0ntlcm91z4.cloudfront.net/user_3F7q9qnOL
 - **v3 첫 판 완성** → `v3/paradise-v3.html` · 비공개 아티팩트 https://claude.ai/artifact/MUbxYn9ZgBVehQhyQ1Deae (일상 → 채팅창·탄막 → 들판 사진 사슬·90초 증빙·지하 → 서커스 공연·무대 뒤 미션·가짜 탈출·사연 → 귀환 팡파레 → 엔딩 A/B). 판별 지도·줄인 것 목록은 `v3/README.md`, 비밀 메모 `script/secret/v3-first-build.md`. 실행 설정 `.claude/launch.json`의 `circus-v3`.
 - 자동 실행으로 흐름 끝까지 오류 없음 확인. 조작감·난이도는 정웅 플레이 대기.
 - 다음: 정웅 플레이 → 가설 비교 → 개선 목록. 노션 '만든 것' 줄 가설 칸 갱신(초안 먼저).
+- **v3 첫 판 정웅 후기** → `playtest/v3-user-review.md`. 가설 둘 다 안 맞음(무섭지 않음 / 엔딩 연출이 의도와 반대). 원인 다섯 갈래: 왜 사슬 끊김 · AI 말투 대사 · 들판 규칙 전달과 게임성 · 공포 · 연출 어긋남. 정할 것: 대사 쓰는 방식(스포일러 규칙과 충돌), 다음 판 방향, 도입(버스/컴퓨터), 초기화의 의미. 정웅이 들판 3D 참고 이미지 보내 줄 예정.
