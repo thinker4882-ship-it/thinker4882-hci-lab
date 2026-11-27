@@ -1,0 +1,1804 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>낙원 서비스</title>
+<style>
+/* 레이아웃: 폰 세로 한 화면. 장마다 층이 바뀐다: 미연시 캔버스(일상·들판·엔딩) / 옛 채팅창(누리) / 3D(서커스). */
+:root {
+  --bg: #03110c; --ink: #d9eadf; --dim: #7fa392; --box: rgba(6, 22, 17, 0.88); --line: #3f8a66; --pick: #e8c86a;
+  --term: #39ff8a; /* 누리와 시스템 안내의 초록 글씨 (귀환 축하도 같은 색·글꼴) */
+  --font: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --mono: "DungGeunMo", "D2Coding", "Consolas", "Malgun Gothic", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); overflow: hidden; }
+#app { position: relative; height: 100%; max-width: 480px; margin: 0 auto; overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; touch-action: none; }
+.layer { position: absolute; inset: 0; }
+canvas.pix { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; object-fit: cover; }
+.sprite { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 58%; max-width: 280px; image-rendering: pixelated; pointer-events: none; }
+#flash { background: #f2f8ee; opacity: 0; pointer-events: none; transition: opacity 1.2s; }
+#flash.on { opacity: 1; }
+#flash.green { background: var(--term); }
+.screen { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; text-align: center; padding: 24px 16px; }
+.screen h1 { font-size: 1.6rem; font-weight: 600; letter-spacing: 0.08em; margin: 0; }
+.screen p { color: var(--dim); margin: 0; line-height: 1.7; font-size: 0.95rem; }
+.screen .small { font-size: 0.8rem; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 12px 22px; border-radius: 2px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+#start button.sub { padding: 8px 16px; font-size: 0.85rem; color: var(--dim); }
+
+#box { position: absolute; left: 10px; right: 10px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); min-height: 118px; background: var(--box); border: 1px solid var(--line); padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+#name { font-size: 0.8rem; color: var(--line); letter-spacing: 0.12em; min-height: 1em; }
+#text { font-size: 1.05rem; line-height: 1.6; min-height: 1.6em; white-space: pre-wrap; }
+#text.narr { color: var(--dim); }
+#choices { display: flex; flex-direction: column; gap: 8px; }
+#choices button { text-align: left; padding: 10px 14px; }
+#hint { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px; text-align: center; font-size: 0.95rem; line-height: 1.6; background: var(--box); border: 1px solid var(--line); padding: 10px 12px; transition: opacity 1.5s; pointer-events: none; white-space: pre-line; z-index: 6; }
+#hud { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); right: 10px; font-size: 0.8rem; background: var(--box); border: 1px solid var(--line); padding: 4px 8px; z-index: 6; pointer-events: none; }
+#hud.warn { border-color: #e86a5a; color: #ffd0c8; }
+#labels { pointer-events: none; }
+#labels span { position: absolute; transform: translate(-50%, -100%); font-size: 0.68rem; background: rgba(3, 17, 12, 0.7); padding: 1px 5px; white-space: nowrap; }
+#gl { touch-action: none; }
+#stick { position: absolute; width: 76px; height: 76px; border: 1px solid var(--line); border-radius: 50%; transform: translate(-50%, -50%); background: rgba(6, 22, 17, 0.35); pointer-events: none; }
+
+/* 옛 채팅창: 검은 바탕 초록 글씨. 위쪽에 도트로 선 두 사람 */
+#term { background: #010a05; color: var(--term); font-family: var(--mono); display: flex; flex-direction: column; }
+#termHead { height: 22%; border-bottom: 1px dashed #1f6a3e; }
+#termLog { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 0.95rem; line-height: 1.65; white-space: pre-wrap; word-break: keep-all; }
+#termLog .me { color: #e6f6d8; }
+#termLog .seoa { color: #9fd8ff; }
+#termLog .sys { color: var(--term); }
+#termLog .narr { color: #4f9a6a; }
+#termLog .big { font-size: 1.5rem; text-align: center; padding: 30px 0; }
+#termPick { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 8px; }
+#termPick button { color: var(--term); border-color: #1f6a3e; font-family: var(--mono); text-align: left; padding: 9px 12px; }
+#termIn { padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #1f6a3e; min-height: 1.4em; color: #e6f6d8; }
+#termIn::before { content: "> "; color: var(--term); }
+#term.shake { animation: shake 0.12s infinite; }
+@keyframes shake { 0% { transform: translate(2px, -1px); } 50% { transform: translate(-2px, 1px); } 100% { transform: translate(1px, 2px); } }
+
+/* 시련: 깨져 가는 창 안의 글자 탄막 */
+#shoot { display: flex; align-items: center; justify-content: center; background: rgba(1, 10, 5, 0.6); z-index: 4; }
+#win { position: relative; width: 86%; max-width: 380px; border: 2px solid var(--term); background: #010a05; transition: transform 0.25s; }
+#winBar { display: flex; justify-content: space-between; align-items: center; background: var(--term); color: #010a05; font-family: var(--mono); font-size: 0.8rem; padding: 2px 6px; }
+#winX { position: relative; color: #010a05; border: 1px solid #010a05; padding: 0 6px; font-size: 0.8rem; line-height: 1.3; transition: left 0.15s, top 0.15s; }
+#shootCv { width: 100%; aspect-ratio: 1; display: block; image-rendering: pixelated; touch-action: none; }
+#shootInfo { font-family: var(--mono); color: var(--term); font-size: 0.8rem; padding: 4px 6px; display: flex; justify-content: space-between; }
+
+/* 들판의 친절한 창 (다크 패턴): 밝고 둥글고 매끄러움. 채팅창의 고장 난 결과 정반대 */
+#dp { position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(255, 240, 230, 0.35); padding: 18px; }
+#dp .card { background: #fffaf3; color: #4a3a32; width: 100%; max-width: 330px; border-radius: 18px; padding: 22px 20px 14px; box-shadow: 0 10px 30px rgba(120, 60, 40, 0.25); text-align: center; font-family: var(--font); }
+#dp h2 { font-size: 1.05rem; margin: 0 0 8px; }
+#dp p { font-size: 0.9rem; line-height: 1.55; margin: 0 0 16px; color: #7a6258; }
+#dp .big { display: block; width: 100%; background: #ff8a6a; color: #fff; border: 0; border-radius: 999px; padding: 13px; font-weight: 600; margin-bottom: 8px; }
+#dp .opt { display: block; width: 100%; background: #fff; color: #4a3a32; border: 1px solid #f0d8cc; border-radius: 12px; padding: 10px; margin-bottom: 6px; }
+#dp .small { background: none; border: 0; color: #c8b8b0; font-size: 0.72rem; padding: 6px; }
+
+#end .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+</style>
+
+<div id="app">
+  <div id="start" class="layer screen">
+    <h1>낙원 서비스</h1>
+    <p>v3 첫 판 · 그림 없이 여정 전체 (25분 안팎)<br>이어폰을 끼고 해 줘. 화면을 누르면 다음으로.</p>
+    <button id="startBtn">처음부터</button>
+    <p class="small">확인용: 장부터 시작</p>
+    <button class="sub" data-from="1">채팅창부터</button>
+    <button class="sub" data-from="2">들판부터</button>
+    <button class="sub" data-from="3">서커스부터</button>
+    <button class="sub" data-from="4">귀환·엔딩부터</button>
+  </div>
+  <div id="vn" class="layer" hidden><canvas id="vnCanvas" class="pix" width="135" height="240"></canvas></div>
+  <img id="seoa" class="sprite" alt="서아" hidden>
+  <div id="world" class="layer" hidden><canvas id="gl" class="pix"></canvas><div id="stick" hidden></div></div>
+  <div id="term" class="layer" hidden><canvas id="termHead" class="pix" width="120" height="40"></canvas><div id="termLog"></div><div id="termPick"></div><div id="termIn"></div></div>
+  <div id="shoot" class="layer" hidden><div id="win"><div id="winBar"><span id="winTitle">누리.exe</span><span id="winX">×</span></div><canvas id="shootCv" width="120" height="120"></canvas><div id="shootInfo"><span id="shootHp"></span><span id="shootPhase"></span></div></div></div>
+  <div id="labels" class="layer"></div>
+  <div id="hud" hidden></div>
+  <div id="hint" hidden></div>
+  <div id="box" hidden><div id="name"></div><div id="text"></div><div id="choices"></div></div>
+  <div id="dp" hidden><div class="card"><h2 id="dpTitle"></h2><p id="dpMsg"></p><div id="dpBtns"></div></div></div>
+  <div id="flash" class="layer"></div>
+  <div id="end" class="layer screen" hidden>
+    <h1>첫 판 끝</h1>
+    <p>어느 순간이 제일 무서웠는지,<br>엔딩 뒤에 무슨 생각이 들었는지 기억해 둬.</p>
+    <p class="small" id="endVer"></p>
+    <div class="row"><button id="otherEndBtn">엔딩 다른 판 보기</button><button id="againBtn">처음부터</button></div>
+  </div>
+</div>
+
+<!-- three.js r128: 서커스 3D 장면 (v2에서 검증한 부품을 그대로 씀). 전역 THREE를 주는 UMD 빌드, MIT 라이선스 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+/* v3 첫 판. 아래 '공용 부품'은 v2/circus-v2.html에서 그대로 가져왔다(소리·대화창·2D 걷기·3D 서커스). v3에서 새로 쓴 건 맨 아래 '장' 단위 함수들. */
+const $ = (id) => document.getElementById(id);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const S = "서아";
+/* ===================== 공용 부품 (v2에서 그대로): 기억 · 소리 ===================== */
+/* ===================== 기억 (장치 6: 다시 열면 기억함) ===================== */
+/** 이 브라우저에만 남는 기록 (막히면 처음 온 사람으로 취급). */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("dcv3-" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("dcv3-" + k, JSON.stringify(v)); } catch (e) {} },
+};
+const visits = store.get("main-visits", 0);
+
+/* ===================== 소리 (장치 7, WebAudio 합성) ===================== */
+let ac = null, master = null, noiseBuf = null;
+/** 사용자가 누른 뒤에만 오디오를 연다 (브라우저 정책). */
+function initAudio() {
+  if (ac) return; // 한 번만 연다
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+}
+/** 짧게 잦아드는 잡음 버퍼 (발소리·문소리·빗소리 재료). */
+function noise() {
+  if (!noiseBuf) {
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noiseBuf;
+}
+/** 버스 엔진 웅웅거림. 멈추는 함수를 돌려준다. */
+function startEngine() {
+  const g = ac.createGain(); g.gain.value = 0.13;
+  const f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 150;
+  const o1 = ac.createOscillator(), o2 = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain();
+  o1.type = o2.type = "sawtooth"; o1.frequency.value = 47; o2.frequency.value = 47.7;
+  lfo.frequency.value = 0.35; lg.gain.value = 0.04; lfo.connect(lg); lg.connect(g.gain);
+  o1.connect(f); o2.connect(f); f.connect(g); g.connect(master);
+  [o1, o2, lfo].forEach((o) => o.start());
+  return () => { [o1, o2, lfo].forEach((o) => { try { o.stop(); } catch (e) {} }); g.disconnect(); };
+}
+/** 빗소리. 세기를 바꿀 수 있는 gain을 돌려준다. */
+function startRain(vol) {
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noise(); s.loop = true; f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = 0.6; g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(master); s.start(); return g;
+}
+/** 램프 지잉 소리. 높이를 바꿀 수 있게 oscillator를 돌려준다. */
+function startHum() {
+  const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+  o.type = "square"; o.frequency.value = 100; f.type = "bandpass"; f.frequency.value = 800; f.Q.value = 3; g.gain.value = 0.018;
+  o.connect(f); f.connect(g); g.connect(master); o.start(); return o;
+}
+/** 돌아가는 세탁기: 낮은 웅웅거림에 통이 구르는 박자. 멈추는 함수를 돌려준다. */
+function startWasher() {
+  const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain();
+  o.type = "triangle"; o.frequency.value = 62; f.type = "lowpass"; f.frequency.value = 220; g.gain.value = 0.07;
+  lfo.frequency.value = 0.9; lg.gain.value = 0.05; lfo.connect(lg); lg.connect(g.gain);
+  o.connect(f); f.connect(g); g.connect(master); o.start(); lfo.start();
+  return () => { try { o.stop(); lfo.stop(); } catch (e) {} g.disconnect(); };
+}
+/** 글자 소리. */
+function blip(pitch, vol) {
+  if (!ac || !pitch) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = "square"; o.frequency.value = pitch;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.05);
+}
+/** 짧은 잡음 한 번 (문 열림 쉬익, 딸깍 등). */
+function burst(freq, dur, vol) {
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime;
+  s.buffer = noise(); f.type = "bandpass"; f.frequency.value = freq; f.Q.value = 1;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + dur + 0.05);
+}
+/** 벽시계 초침. 가끔 한 박을 건너뛰거나 두 번 친다. 멈추는 함수를 돌려준다. */
+function startClock() {
+  let alive = true, n = 0;
+  const tick = () => {
+    if (!alive) return;
+    n++;
+    const skip = n > 6 && Math.random() < 0.12, dbl = n > 6 && Math.random() < 0.08;
+    if (!skip) burst(4200, 0.02, 0.05);
+    if (dbl) setTimeout(() => burst(4200, 0.02, 0.05), 140);
+    setTimeout(tick, 1000);
+  };
+  tick(); return () => { alive = false; };
+}
+/** 문 너머 오르골 왈츠. 시간이 갈수록 음이 틀어진다. 멈추는 함수와 '잠깐 멈춤' 함수를 돌려준다. */
+function startMusicBox() {
+  const melody = [76, 79, 84, 83, 79, 76, 74, 77, 81, 79, 76, 72]; // 미디 번호, 3/4박
+  const out = ac.createGain(), f = ac.createBiquadFilter();
+  out.gain.value = 0.0; f.type = "lowpass"; f.frequency.value = 1800; // 문 너머라 먹먹하게
+  out.connect(f); f.connect(master);
+  out.gain.linearRampToValueAtTime(0.06, ac.currentTime + 6);
+  let alive = true, i = 0, drift = 0, paused = false;
+  const play = () => {
+    if (!alive) return;
+    if (!paused) {
+      const t = ac.currentTime, m = melody[i % melody.length] + drift * (Math.random() - 0.3);
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "triangle"; o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 1);
+      i++; drift = Math.min(1.6, drift + 0.02);
+    }
+    setTimeout(play, i % 3 === 0 ? 520 : 400 + drift * 60);
+  };
+  play();
+  return { stop() { alive = false; out.gain.value = 0; }, pause(ms) { paused = true; setTimeout(() => (paused = false), ms); } };
+}
+
+/** 고정 시드 난수 (불빛 자리가 매번 같게). */
+function seeded(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const cityDots = (() => { const r = seeded(7); return Array.from({ length: 40 }, () => [r(), r()]); })();
+/** 다각형 채우기. */
+function poly(pts, c) { vx.fillStyle = c; vx.beginPath(); vx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) vx.lineTo(pts[i], pts[i + 1]); vx.fill(); }
+
+/* ===================== v3: 미연시 캔버스 장면들 (일상·카페·파노라마·엔딩 거실) ===================== */
+const vc = $("vnCanvas"), vx = vc.getContext("2d");
+const vn = { scene: "black", big: false, face: "calm", glitch: 0, day: false, crt: 0, unplug: false, danFace: false, pano: "conv", zoom: 1, turn: null, orgelShake: 0 };
+const NURI = 330; // 누리·시스템 안내 목소리 높이 (귀환 축하도 같은 높이)
+
+/** 작은 사람 하나 (엔딩·파노라마용, s배 크기). face: up(뒷모습)/left/right/down. */
+function personAt(x, y, body, s, face, hair) {
+  const p = (a, b, w, h, c) => { vx.fillStyle = c; vx.fillRect(Math.round(x + a * s), Math.round(y + b * s), Math.ceil(w * s), Math.ceil(h * s)); };
+  p(1, 7, 1, 2, "#1a1a22"); p(3, 7, 1, 2, "#1a1a22"); p(0, 3, 5, 4, body); p(1, 0, 3, 3, "#e6d6c3");
+  p(1, 0, 3, face === "up" ? 3 : 1, hair || "#16110f");
+  if (face === "left") { p(0, 0, 1, 2, hair || "#16110f"); p(1, 1, 1, 1, "#111"); }
+  if (face === "right") { p(4, 0, 1, 2, hair || "#16110f"); p(3, 1, 1, 1, "#111"); }
+  if (face === "down") { p(1, 1, 1, 1, "#111"); p(3, 1, 1, 1, "#111"); }
+}
+/** 0장·귀환: 평일 밤(또는 아침)의 자취방. 구석의 오래된 컴퓨터. */
+function drawStudio(t) {
+  const d = vn.day;
+  vx.fillStyle = d ? "#c9d2c8" : "#1a262c"; vx.fillRect(0, 0, 135, 170);
+  for (let y = 170; y < 240; y += 6) { vx.fillStyle = (y / 6) % 2 ? (d ? "#a8865a" : "#3a2c22") : (d ? "#9a7a50" : "#33271e"); vx.fillRect(0, y, 135, 6); }
+  vx.fillStyle = d ? "#bfe4f2" : "#0b1830"; vx.fillRect(10, 30, 44, 46); // 창
+  if (!d) { vx.fillStyle = "#e8c86a"; [[14, 60], [20, 52], [33, 64], [44, 58], [48, 66], [26, 70]].forEach(([a, b]) => vx.fillRect(a, b, 1, 1)); }
+  vx.fillStyle = d ? "#8a9a92" : "#2a3a40"; vx.fillRect(10, 52, 44, 2); vx.fillRect(31, 30, 2, 46);
+  vx.fillStyle = d ? "#e8eef0" : "#3a4a5a"; vx.fillRect(0, 172, 58, 24); vx.fillStyle = d ? "#f4f6f4" : "#4a5a6a"; vx.fillRect(2, 168, 18, 8); // 침대
+  vx.fillStyle = d ? "#7a5a3a" : "#3a2a1e"; vx.fillRect(76, 124, 56, 5); vx.fillRect(80, 129, 3, 40); vx.fillRect(126, 129, 3, 40); // 책상
+  vx.fillStyle = d ? "#d8d0b8" : "#8a8470"; vx.fillRect(86, 94, 32, 30); vx.fillRect(94, 124, 16, 2); // 옛 모니터
+  const on = vn.crt > 0;
+  vx.fillStyle = on ? "#0a3a1c" : "#121a16"; vx.fillRect(90, 98, 24, 19);
+  if (on) {
+    vx.fillStyle = "#39ff8a"; for (let i = 0; i < 4; i++) if ((t / 220 + i) % 5 > 1) vx.fillRect(92, 101 + i * 4, 6 + ((i * 7 + Math.floor(t / 400)) % 12), 1);
+    if (vn.crt > 1) { vx.fillStyle = `rgba(57,255,138,${Math.min(0.85, (vn.crt - 1) * 0.3)})`; vx.fillRect(0, 0, 135, 240); }
+  }
+  if (vn.unplug) { vx.fillStyle = "#222"; vx.fillRect(110, 168, 20, 1); vx.fillRect(130, 166, 3, 3); }
+}
+/** 서커스 가짜 탈출: 햇살 드는 카페. 너무 깨끗하다. */
+function drawCafe(t) {
+  vx.fillStyle = "#f2e6d2"; vx.fillRect(0, 0, 135, 240);
+  vx.fillStyle = "#fffbe8"; vx.fillRect(8, 20, 119, 90); vx.fillStyle = "#e0d4bc"; vx.fillRect(66, 20, 3, 90); vx.fillRect(8, 64, 119, 2);
+  vx.fillStyle = "rgba(255,240,190,0.5)"; vx.beginPath(); vx.moveTo(8, 110); vx.lineTo(127, 110); vx.lineTo(135, 200); vx.lineTo(0, 200); vx.fill();
+  vx.fillStyle = "#b8865a"; vx.fillRect(20, 150, 95, 6); vx.fillRect(64, 156, 6, 60);
+  vx.fillStyle = "#fff"; vx.fillRect(40, 143, 9, 7); vx.fillRect(86, 143, 9, 7); vx.fillStyle = "#6a4a2a"; vx.fillRect(41, 144, 7, 2); vx.fillRect(87, 144, 7, 2);
+  vx.fillStyle = "#4a8a4a"; vx.fillRect(118, 120, 10, 30); vx.fillStyle = "#a86a4a"; vx.fillRect(116, 150, 14, 12);
+  if (vn.danFace) { // 서아 자리에 단장
+    vx.fillStyle = "#050505"; vx.fillRect(44, 40, 48, 200); vx.fillRect(52, 18, 32, 24);
+    vx.fillStyle = "#e8e2d8"; vx.fillRect(52, 44, 32, 30); vx.fillStyle = "#050505"; vx.fillRect(56, 62, 24, 3);
+  }
+}
+/** 엔딩 파노라마 한 장면 (그림 없는 첫 판이라 색 덩어리와 작은 사람만). */
+function drawPano(t) {
+  const k = vn.pano;
+  const sky = { conv: "#0a1428", fire: "#060a1c", office: "#5a6470", newhome: "#e8dcc8", baby: "#f0f0ec", trip: "#9ad4f0" }[k];
+  vx.fillStyle = sky; vx.fillRect(0, 0, 135, 240);
+  if (k === "conv") { vx.fillStyle = "#2a3a4a"; vx.fillRect(0, 170, 135, 70); vx.fillStyle = "#e8f4ff"; vx.fillRect(20, 90, 95, 70); vx.fillStyle = "#3a8ae8"; vx.fillRect(20, 84, 95, 8); vx.fillStyle = "#8a6a4a"; vx.fillRect(30, 168, 60, 4);
+    personAt(42, 150, "#4a5a7a", 2, "down"); personAt(62, 150, "#7a8aa8", 2, "down"); vx.fillStyle = "#c8c8c8"; vx.fillRect(56, 162, 2, 4); vx.fillRect(76, 162, 2, 4); }
+  if (k === "fire") { vx.fillStyle = "#1a2030"; vx.fillRect(0, 190, 135, 50);
+    [[30, 50, "#e85a5a"], [90, 40, "#e8d84a"], [64, 80, "#5ae8a8"]].forEach(([x, y, c], i) => { const r = ((t / 30 + i * 20) % 40); vx.fillStyle = c; for (let a = 0; a < 12; a++) vx.fillRect(Math.round(x + Math.cos(a / 12 * 6.28) * r), Math.round(y + Math.sin(a / 12 * 6.28) * r), 1, 1); });
+    personAt(52, 172, "#4a5a7a", 2, "right"); personAt(70, 172, "#a86a8a", 2, "left"); }
+  if (k === "office") { vx.fillStyle = "#3a424a"; vx.fillRect(10, 20, 115, 160); vx.fillStyle = "#c8d0b0"; for (let y = 30; y < 170; y += 16) for (let x = 18; x < 120; x += 14) vx.fillRect(x, y, 8, 9);
+    vx.fillStyle = "#2a3038"; vx.fillRect(0, 180, 135, 60); vx.fillStyle = "rgba(200,220,240,0.5)"; for (let i = 0; i < 30; i++) vx.fillRect((i * 37 + t / 6) % 135, (i * 53 + t / 2) % 240, 1, 4);
+    vx.fillStyle = "#e85a5a"; vx.beginPath(); vx.ellipse(66, 166, 16, 6, 0, Math.PI, 0); vx.fill(); personAt(56, 168, "#3a3a4a", 2, "down"); personAt(68, 168, "#7a8aa8", 2, "down"); }
+  if (k === "newhome") { vx.fillStyle = "#c8b89a"; vx.fillRect(0, 180, 135, 60); vx.fillStyle = "#b08858";
+    [[10, 150, 24, 30], [30, 160, 20, 20], [96, 156, 28, 24]].forEach(([x, y, w, h]) => vx.fillRect(x, y, w, h)); vx.fillStyle = "#6a4a30"; vx.fillRect(56, 60, 40, 120);
+    vx.fillStyle = "#8a6a48"; for (let y = 80; y < 180; y += 24) vx.fillRect(56, y, 40, 3); vx.fillStyle = "#e8c86a"; vx.fillRect(72, 70, 7, 6); personAt(100, 140, "#a86a8a", 2, "left"); }
+  if (k === "baby") { vx.fillStyle = "#dfe8e8"; vx.fillRect(0, 180, 135, 60); personAt(58, 140, "#4a5a7a", 3, "down"); vx.fillStyle = "#fff4f0"; vx.fillRect(58, 154, 14, 7); }
+  if (k === "trip") { vx.fillStyle = "#3a8ac8"; vx.fillRect(0, 110, 135, 60); vx.fillStyle = "#f0dca0"; vx.fillRect(0, 170, 135, 70);
+    personAt(40, 160, "#4a5a7a", 2, "up"); personAt(56, 160, "#a86a8a", 2, "up"); personAt(72, 172, "#e8a84a", 1.4, "down"); }
+}
+/** 엔딩 마지막: 저녁 거실. 책장 위 오르골. zoom으로 책장 쪽으로 다가간다. */
+function drawHome(t) {
+  const z = vn.zoom, cx = 64, cy = 110;
+  vx.save(); vx.translate(cx, cy); vx.scale(z, z); vx.translate(-cx, -cy);
+  vx.fillStyle = "#4a3426"; vx.fillRect(-200, -200, 600, 600);
+  vx.fillStyle = "#3a2a20"; vx.fillRect(0, 180, 135, 60);
+  vx.fillStyle = "#c86a4a"; vx.fillRect(60, 40, 34, 40); vx.fillStyle = "#e8a060"; vx.fillRect(60, 64, 34, 16); vx.fillStyle = "#3a2a20"; vx.fillRect(76, 40, 2, 40); // 노을 창
+  vx.fillStyle = "#5a3a26"; vx.fillRect(14, 76, 40, 104); vx.fillStyle = "#3a2618"; for (let y = 100; y < 180; y += 26) vx.fillRect(14, y, 40, 3);
+  const bc = ["#8a3a3a", "#3a5a8a", "#8a7a3a", "#3a6a4a", "#6a4a7a"]; for (let i = 0; i < 9; i++) { vx.fillStyle = bc[i % 5]; vx.fillRect(17 + (i % 6) * 6, 104 + Math.floor(i / 6) * 26 + (i % 2), 4, 18); }
+  const sx = vn.orgelShake ? Math.round((Math.random() - 0.5) * 3) : 0; // 오르골 (책장 꼭대기)
+  vx.fillStyle = "#e8c86a"; vx.fillRect(30 + sx, 69, 8, 7); vx.fillStyle = "#a8843a"; vx.fillRect(30 + sx, 69, 8, 2); vx.fillStyle = "#f8e8a8"; vx.fillRect(38 + sx, 72, 2, 1);
+  vx.fillStyle = "#f0d8a0"; vx.fillRect(104, 110, 24, 70); // 현관 쪽 불빛
+  const tr = vn.turn, now = performance.now();
+  const meFace = tr && now > tr.me ? "left" : "up", seFace = tr && now > tr.seoa ? "left" : "up";
+  personAt(84, 160, "#3a3a4a", 2, meFace); personAt(95, 160, "#a86a8a", 2, seFace, "#2a1a10");
+  vx.restore();
+}
+/** 한 프레임: 장면 → 서아 그림 → 줄 밀림 → 색 기운. */
+function frame(t) {
+  if (vn.freezeUntil > t) { requestAnimationFrame(frame); return; } // 엔딩 B판: 한 프레임 끊김
+  const sc = vn.scene;
+  if (sc === "studio") drawStudio(t); else if (sc === "cafe") drawCafe(t); else if (sc === "pano") drawPano(t); else if (sc === "home") drawHome(t);
+  else if (is2D()) draw2D(t); else { vx.fillStyle = "#000"; vx.fillRect(0, 0, 135, 240); }
+  showSeoa((!$("vn").hidden && (sc === "studio" || sc === "cafe") || !$("world").hidden) && vn.big);
+  placeLabels(labelsFor());
+  for (let i = 0; i < vn.glitch * 3; i++) if (Math.random() < 0.3) {
+    const y = Math.floor(Math.random() * 240), h = 2 + Math.floor(Math.random() * 6);
+    vx.drawImage(vc, 0, y, 135, h, (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 5), y, 135, h);
+  }
+  if (sc === "studio" && !vn.day) { vx.fillStyle = "rgba(30,160,100,0.08)"; vx.fillRect(0, 0, 135, 240); }
+  requestAnimationFrame(frame);
+}
+$("vn").addEventListener("pointerup", (e) => { if (is2D()) { if (W2.busy) onTap(); else release2D(); return; } onTap(); });
+
+/* ===================== v3: 소리 (새로 쓴 것) ===================== */
+const ORGEL = [76, 79, 84, 83, 79, 76, 74, 77, 81, 79, 76, 72]; // 오르골 원곡. 서커스 행진곡은 이걸 틀어 쓴 것
+const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+/** 오르골 한 바퀴. opts.wrongAt: 그 음만 서커스 쪽으로 틀어짐(onWrong 호출). opts.hum: 낮은 사람 목소리가 따라 흥얼거림. 끝나면 풀린다. */
+async function playOrgel(opts = {}) {
+  const out = ac.createGain(); out.gain.value = opts.vol || 0.08; out.connect(master);
+  for (let i = 0; i < ORGEL.length; i++) {
+    const t = ac.currentTime, wrong = i === opts.wrongAt;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = wrong ? "square" : "triangle"; o.frequency.value = mtof(ORGEL[i] + (wrong ? -0.7 : 0));
+    g.gain.setValueAtTime(wrong ? 0.4 : 0.6, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + 1.2);
+    if (wrong && opts.onWrong) opts.onWrong();
+    if (opts.hum) { const h = ac.createOscillator(), hg = ac.createGain(), v = ac.createOscillator(), vg = ac.createGain();
+      h.type = "sine"; h.frequency.value = mtof(ORGEL[i] - 36); v.frequency.value = 5; vg.gain.value = 3; v.connect(vg); vg.connect(h.frequency);
+      hg.gain.setValueAtTime(0.0001, t); hg.gain.linearRampToValueAtTime(0.22, t + 0.08); hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      h.connect(hg); hg.connect(master); h.start(t); v.start(t); h.stop(t + 0.55); v.stop(t + 0.55); }
+    if (wrong && opts.stopAfterWrong) { await wait(1400); return; }
+    await wait(i % 3 === 0 ? 560 : 420);
+  }
+  await wait(600);
+}
+/** 키링 딸랑 (오르골 세 음). */
+function jingle() { [0, 140, 280].forEach((ms, i) => setTimeout(() => blip(mtof(ORGEL[i]), 0.03), ms)); }
+/** 게임 클리어 팡파레 + 사방의 박수. */
+function fanfare() {
+  const seq = [60, 64, 67, 72, 67, 72, 76, 79];
+  seq.forEach((m, i) => setTimeout(() => { const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = "square"; o.frequency.value = mtof(m);
+    g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.0001, t + (i === 7 ? 1.6 : 0.2)); o.connect(g); g.connect(master); o.start(t); o.stop(t + 1.7); }, i * 130));
+  setTimeout(() => [72, 76, 79, 84].forEach((m) => { const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = "square"; o.frequency.value = mtof(m);
+    g.gain.setValueAtTime(0.04, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4); o.connect(g); g.connect(master); o.start(t); o.stop(t + 2.5); }), 1150);
+  clap(3.5);
+}
+/** 들판: 부드러운 화음 + 새소리. 멈추는 함수를 돌려준다. */
+function startMeadow() {
+  const g = ac.createGain(); g.gain.value = 0.02; g.connect(master); let alive = true, i = 0;
+  const ch = [[60, 64, 67, 71], [57, 60, 64, 67], [65, 69, 72, 76], [62, 65, 69, 72]];
+  const play = () => { if (!alive) return; const t = ac.currentTime;
+    ch[i++ % 4].forEach((m) => { const o = ac.createOscillator(), e = ac.createGain(); o.type = "sine"; o.frequency.value = mtof(m);
+      e.gain.setValueAtTime(0.0001, t); e.gain.linearRampToValueAtTime(0.5, t + 1); e.gain.linearRampToValueAtTime(0.0001, t + 3.4); o.connect(e); e.connect(g); o.start(t); o.stop(t + 3.5); });
+    if (Math.random() < 0.7) for (let k = 0; k < 3; k++) setTimeout(() => { const t2 = ac.currentTime, o = ac.createOscillator(), e = ac.createGain(); o.type = "sine";
+      o.frequency.setValueAtTime(2800, t2); o.frequency.exponentialRampToValueAtTime(3900, t2 + 0.07); e.gain.setValueAtTime(0.02, t2); e.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.09); o.connect(e); e.connect(master); o.start(t2); o.stop(t2 + 0.1); }, 600 + k * 150);
+    setTimeout(play, 3200); };
+  play(); return { stop() { alive = false; g.gain.value = 0; }, gain: g };
+}
+/** 사진 플래시 (셔터 소리 + 하얀 번쩍). */
+async function photoFlash() {
+  const fl = $("flash"); fl.style.transition = "none"; fl.classList.add("on"); burst(3200, 0.08, 0.25); burst(900, 0.05, 0.15);
+  await wait(90); fl.classList.remove("on"); await wait(30); fl.style.transition = "";
+}
+/* ===================== 공용 부품 (v2에서 그대로): 서아 그림 · 대화창 · 2D 걷기 · 3D 서커스 ===================== */
+/** 서아 (힉스필드 그림). 표정에 맞는 그림을 띄우고, 화면이 밀릴 땐 같이 흔들린다. */
+const seoaImg = $("seoa");
+function showSeoa(on) {
+  seoaImg.hidden = !on; if (!on) return;
+  const want = "img/seoa-" + (["worry", "smile", "wrong"].includes(vn.face) ? vn.face : "calm") + ".png";
+  if (seoaImg.dataset.face !== want) { seoaImg.src = want; seoaImg.dataset.face = want; }
+  seoaImg.style.transform = vn.glitch && Math.random() < 0.15 * vn.glitch ? `translateX(calc(-50% + ${(Math.random() - 0.5) * 8 * vn.glitch}px))` : "translateX(-50%)";
+}
+/* ===================== 대화창 (미연시 형식) ===================== */
+const box = $("box"), nameEl = $("name"), textEl = $("text"), choicesEl = $("choices");
+const talk = { typing: false, full: "", timer: null, resolve: null, waitTap: false };
+const VOICE = { "서아": 620, "안내 방송": 300, "안내": NURI, "단장": 220, "나": 0, "": 0 };
+/** 한 줄을 타자 치듯 띄우고, 다 읽고 누르면 끝나는 약속을 돌려준다. who가 ""이면 행동 묘사. */
+function say(who, text, opts = {}) {
+  return new Promise((resolve) => {
+    box.hidden = false; nameEl.textContent = who; textEl.textContent = ""; choicesEl.innerHTML = "";
+    textEl.classList.toggle("narr", who === "");
+    vn.big = opts.small ? false : (who === "서아" ? true : (vn.scene === "bus"));
+    talk.full = text; talk.typing = true; talk.waitTap = false; talk.resolve = resolve;
+    const pitch = opts.pitch !== undefined ? opts.pitch : VOICE[who];
+    let i = 0; clearInterval(talk.timer);
+    talk.timer = setInterval(() => {
+      i++; textEl.textContent = text.slice(0, i);
+      if (i % 2 === 1 && text[i - 1] && text[i - 1] !== " ") blip(pitch, 0.025);
+      if (i >= text.length) {
+        clearInterval(talk.timer); talk.typing = false;
+        if (opts.auto) setTimeout(() => { talk.resolve = null; resolve(); }, opts.auto); else talk.waitTap = true;
+      }
+    }, opts.speed || 48);
+  });
+}
+/** 선택지를 띄우고 고른 번호를 돌려준다 (진짜 선택). */
+function choose(labels) {
+  return new Promise((resolve) => {
+    box.hidden = false; nameEl.textContent = ""; textEl.textContent = ""; choicesEl.innerHTML = ""; talk.waitTap = false;
+    const shown = performance.now(); // 대사 넘기던 터치가 새 버튼에 그대로 들어가는 것(유령 클릭) 막기
+    labels.forEach((l, i) => {
+      const b = document.createElement("button"); b.id = "choice" + i; b.textContent = l;
+      b.addEventListener("click", () => { if (performance.now() - shown < 400) return; blip(880, 0.03); choicesEl.innerHTML = ""; resolve(i); });
+      choicesEl.appendChild(b);
+    });
+  });
+}
+/** 화면을 누르면: 치는 중이면 다 보여 주고, 다 보였으면 다음으로. */
+function onTap() {
+  if (talk.typing) { clearInterval(talk.timer); textEl.textContent = talk.full; talk.typing = false; talk.waitTap = true; return; }
+  if (talk.waitTap) { talk.waitTap = false; const r = talk.resolve; talk.resolve = null; if (r) r(); }
+}
+box.addEventListener("pointerup", (e) => { if (e.target.tagName !== "BUTTON") onTap(); });
+/** 위쪽 안내 문구를 잠깐 띄운다. */
+function hint(text, ms) { const h = $("hint"); h.textContent = text; h.hidden = false; h.style.opacity = "1"; setTimeout(() => (h.style.opacity = "0"), ms || 3500); }
+/* ===================== 2D 엔진 (계단 2·3: 위에서 내려다보며 걷기) ===================== */
+const T = 8, OY = 30;                       // 타일 크기, 맵을 캔버스에 놓는 세로 위치
+const SOLID = "#thkuwXgmcd";               // 못 지나가는 타일 (들판·지하)
+const W2 = { map: [], px: 0, py: 0, hold: null, down: null, auto: null, busy: true, trail: [], sx: 0, sy: 0, seoaAway: false,
+  npcs: [], things: [], dark: false, flick: false, moved: false, face: "up", stepAcc: 0, stuck: 0, tick: null, catchFig: null };
+const is2D = () => vn.scene === "field" || vn.scene === "under";
+/** 그 자리의 타일 글자. 맵 밖은 벽. */
+function tileAt(x, y) { const r = W2.map[Math.floor(y / T)]; return (r && r[Math.floor(x / T)]) || "#"; }
+/** 발밑 네 귀퉁이가 모두 비어 있는지. */
+function free(x, y) { return [[-2, 0], [2, 0], [-2, -2], [2, -2]].every(([a, b]) => !SOLID.includes(tileAt(x + a, y + b))); }
+
+/** 한 프레임 이동: 누르고 있으면 손가락 쪽으로, 살펴볼 것을 짧게 눌렀으면 그쪽으로 걸어가 닿으면 살펴본다. */
+function move2D(dt) {
+  W2.moved = false;
+  if (W2.busy) return;
+  if (W2.auto && !W2.hold) {
+    const da = Math.hypot(W2.auto.x - W2.px, W2.auto.y - W2.py);
+    if (da < (W2.auto.reach || 13) || (W2.stuck > 0.6 && da < 26)) { const a = W2.auto; W2.auto = null; W2.path = []; W2.stuck = 0; act(a); return; }
+  }
+  while (!W2.hold && W2.path && W2.path.length && Math.hypot(W2.path[0][0] - W2.px, W2.path[0][1] - W2.py) < 1.5) W2.path.shift();
+  const tgt = W2.hold || (W2.auto && W2.path && W2.path.length ? { x: W2.path[0][0], y: W2.path[0][1] } : W2.auto);
+  if (!tgt) return;
+  const dx = tgt.x - W2.px, dy = tgt.y - W2.py, d = Math.hypot(dx, dy);
+  if (d < 1.5) return;
+  const s = Math.min(30 * (W2.spd || 1) * dt, d), ox = W2.px, oy = W2.py;
+  if (free(W2.px + dx / d * s, W2.py)) W2.px += dx / d * s;
+  if (free(W2.px, W2.py + dy / d * s)) W2.py += dy / d * s;
+  const went = Math.hypot(W2.px - ox, W2.py - oy);
+  W2.stuck = went < 0.05 ? W2.stuck + dt : 0;
+  if (W2.stuck > 1.5) { W2.auto = null; W2.stuck = 0; }
+  if (went < 0.05) return;
+  W2.moved = true; W2.face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+  W2.trail.push([W2.px, W2.py]); if (W2.trail.length > 60) W2.trail.shift();
+  W2.stepAcc += dt; if (W2.stepAcc > 0.32) { W2.stepAcc = 0; burst(500, 0.05, 0.05); }
+  if (!W2.seoaAway && W2.trail.length > 14) { const p = W2.trail[W2.trail.length - 14]; W2.sx = p[0]; W2.sy = p[1]; }
+}
+/** 살펴보기 실행. 그동안 입력을 막고, 끝나면 대화창을 닫는다. */
+async function act(o) {
+  W2.busy = true; W2.hold = null;
+  try { await o.act(o); } finally { box.hidden = true; vn.big = false; W2.busy = false; }
+}
+/** 화면 좌표 → 2D 맵 좌표. */
+function to2D(e) { const p = toCanvas(e); return { x: p.x, y: p.y - OY }; }
+const vnEl = $("vn");
+vnEl.addEventListener("pointerdown", (e) => {
+  if (!is2D() || W2.busy) return;
+  const p = to2D(e); W2.down = { t: performance.now(), p }; W2.hold = p; W2.auto = null;
+});
+vnEl.addEventListener("pointermove", (e) => { if (is2D() && W2.hold) W2.hold = to2D(e); });
+/** 손을 떼면 멈춘다. 짧게 눌렀고 그 자리에 살펴볼 것이 있으면 그쪽으로 걸어간다. */
+function release2D() {
+  const short = W2.down && performance.now() - W2.down.t < 260, p = W2.down && W2.down.p;
+  W2.hold = null; W2.down = null;
+  if (!short) return;
+  const all = W2.things.concat(W2.npcs, [W2.seoa]).filter((o) => o && o.act && !o.gone);
+  let best = null, bd = 1e9;
+  all.forEach((o) => { const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < (o.r || 9) && d < bd) { best = o; bd = d; } });
+  if (best) { W2.auto = best; W2.path = findPath(best.x, best.y); }
+}
+/** 타일 칸 단위 너비 우선 탐색: 살펴볼 것 바로 옆 빈칸까지 가는 길 (타일 가운데 점들). */
+function findPath(tx, ty) {
+  const ok = (c, r) => { const ch = (W2.map[r] || "")[c]; return ch !== undefined && !SOLID.includes(ch); };
+  const k = (c, r) => r * 64 + c, c0 = Math.floor(W2.px / T), r0 = Math.floor((W2.py - 1) / T), ct = Math.floor(tx / T), rt = Math.floor(ty / T);
+  const prev = new Map([[k(c0, r0), null]]), q = [[c0, r0]];
+  let end = null;
+  while (q.length) {
+    const [c, r] = q.shift();
+    if (Math.abs(c - ct) + Math.abs(r - rt) <= 1) { end = [c, r]; break; }
+    for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = [c + a, r + b]; if (ok(n[0], n[1]) && !prev.has(k(n[0], n[1]))) { prev.set(k(n[0], n[1]), [c, r]); q.push(n); } }
+  }
+  const out = []; for (let cur = end; cur; cur = prev.get(k(cur[0], cur[1]))) out.unshift([cur[0] * T + 4, cur[1] * T + 6]);
+  return out.slice(1);
+}
+/** 작은 사람 하나 (5×9). face: down/up/left/right. */
+function drawPerson(x, y, o) {
+  const X = Math.round(x) - 2, Y = Math.round(y) + OY - 9;
+  vx.fillStyle = "#1a1a22"; vx.fillRect(X + 1, Y + 7, 1, 2); vx.fillRect(X + 3, Y + 7, 1, 2);
+  vx.fillStyle = o.body; vx.fillRect(X, Y + 3, 5, 4);
+  vx.fillStyle = o.skin || "#e6d6c3"; vx.fillRect(X + 1, Y, 3, 3);
+  vx.fillStyle = o.hair || "#16110f"; vx.fillRect(X + 1, Y, 3, o.face === "up" ? 3 : 1);
+  if (o.bob) { vx.fillRect(X, Y, 1, 3); vx.fillRect(X + 4, Y, 1, 3); }
+  if (o.blank) return;
+  vx.fillStyle = "#111";
+  if (o.face === "down") { vx.fillRect(X + 1, Y + 1, 1, 1); vx.fillRect(X + 3, Y + 1, 1, 1); }
+  else if (o.face === "left") vx.fillRect(X + 1, Y + 1, 1, 1);
+  else if (o.face === "right") vx.fillRect(X + 3, Y + 1, 1, 1);
+  if (o.laugh && o.face !== "up") { vx.fillStyle = "#611"; vx.fillRect(X + 2, Y + 2, 1, 1); }
+}
+/** 나를 향한 방향. */
+function faceTo(o) { const dx = W2.px - o.x, dy = W2.py - o.y; return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"); }
+const ME = { body: "#2a2a3a", hair: "#16110f" }, SEOA2 = { body: "#5d6f8f", hair: "#16110f", bob: true };
+/** 2D 한 프레임: 이동 → 장면별 갱신 → 타일 → 사람들(아래쪽이 앞) → 정전. */
+let last2D = 0;
+function draw2D(t) {
+  const dt = Math.min(0.05, (t - (last2D || t)) / 1000); last2D = t;
+  move2D(dt);
+  if (W2.tick) W2.tick(t, dt);
+  vx.fillStyle = "#020a07"; vx.fillRect(0, 0, 135, 240);
+  W2.map.forEach((row, r) => { for (let c = 0; c < row.length; c++) drawTile(row[c], c, r, t); });
+  const people = [{ x: W2.px, y: W2.py, o: { ...ME, face: W2.face } }];
+  W2.seoa.x = W2.sx; W2.seoa.y = W2.sy;
+  if (!W2.seoaAway) people.push({ x: W2.sx, y: W2.sy, o: { ...SEOA2, face: W2.seoaFace || "up" } });
+  W2.npcs.forEach((n) => { if (!n.gone) people.push({ x: n.x, y: n.y, o: n }); });
+  if (W2.farFig && !W2.dark) people.push({ x: W2.farFig.x, y: W2.farFig.y, tall: true });
+  people.sort((a, b) => a.y - b.y).forEach((p) => p.tall ? drawTall(p.x, p.y) : drawPerson(p.x, p.y, p.o));
+  if (W2.dark || W2.flick) { vx.fillStyle = W2.dark ? "rgba(0,0,0,0.9)" : "rgba(0,0,0,0.5)"; vx.fillRect(0, 0, 135, 240); }
+  if (W2.catchFig) drawPerson(W2.catchFig.x, W2.catchFig.y, { body: "#d8dccf", hair: "#16110f", face: "down", blank: true }); // 복도에서 잡는 건 단장이 아니라 얼굴 없는 흰 셔츠
+}
+/** 단장: 키 큰 검은 형체, 얼굴 자리만 희다. */
+function drawTall(x, y) {
+  const X = Math.round(x) - 3, Y = Math.round(y) + OY - 18;
+  vx.fillStyle = "#050505"; vx.fillRect(X, Y + 5, 7, 13); vx.fillRect(X + 1, Y - 2, 5, 3);
+  vx.fillStyle = "#e8e2d8"; vx.fillRect(X + 1, Y + 1, 5, 4);
+  vx.fillStyle = "#050505"; vx.fillRect(X + 1, Y + 3, 5, 1);
+}
+const labelsEl = $("labels"); let labelKey = "";
+/** 이름표를 맵 좌표에 맞춰 화면 위에 놓는다 (캔버스가 잘린 만큼 보정). */
+function placeLabels(list) {
+  const key = list ? list.map((l) => l[0]).join() : "";
+  if (key !== labelKey) { labelKey = key; labelsEl.innerHTML = list ? list.map((l) => `<span>${l[0]}</span>`).join("") : ""; }
+  if (!list) return;
+  const r = vc.getBoundingClientRect(), a = $("app").getBoundingClientRect(), s = Math.max(r.width / 135, r.height / 240);
+  const ox = r.left - a.left + (r.width - 135 * s) / 2, oy = r.top - a.top + (r.height - 240 * s) / 2;
+  [...labelsEl.children].forEach((el, i) => { el.style.left = ox + list[i][1] * s + "px"; el.style.top = oy + (list[i][2] + OY) * s + "px"; });
+}
+function setMap(rows, x, y) {
+  W2.map = rows; W2.px = x; W2.py = y; W2.sx = x; W2.sy = y + 10; W2.trail = []; W2.hold = W2.auto = null; W2.seoaAway = false;
+  W2.seoa = { x: W2.sx, y: W2.sy, r: 8, act: () => seoaTalk2() };
+}
+/** 붙잡혔을 때 낮게 부풀어 오르는 화음. */
+function stinger() {
+  const t = ac.currentTime;
+  [55, 58.3, 82.4, 116].forEach((fq) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sawtooth"; o.frequency.value = fq;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 2.3);
+  });
+}
+/** 편의점 직원 웃음 (하, 하, 하). */
+function laugh(vol) { [0, 150, 300].forEach((ms, i) => setTimeout(() => blip(520 - i * 40, vol || 0.03), ms)); }
+/** 형광등 지잉 (정전 때 끌 수 있게 gain을 돌려준다). */
+function startBuzz() {
+  const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+  o.type = "square"; o.frequency.value = 100; f.type = "bandpass"; f.frequency.value = 900; f.Q.value = 3; g.gain.value = 0.025;
+  o.connect(f); f.connect(g); g.connect(master); o.start(); return { gain: g, stop() { try { o.stop(); } catch (e) {} } };
+}
+/* ===================== 3D 소리: 위치가 있는 소리 ===================== */
+/** 3D 위치에 붙는 소리 출구 (HRTF: 이어폰에서 앞뒤·좌우가 갈림). */
+function makePanner(x, y, z) {
+  const p = ac.createPanner(); p.panningModel = "HRTF"; p.distanceModel = "inverse"; p.refDistance = 1; p.rolloffFactor = 1.1;
+  setPannerPos(p, x, y, z); p.connect(master); return p;
+}
+/** 패너 위치 갱신 (옛 사파리 대비 setPosition도). */
+function setPannerPos(p, x, y, z) { if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; } else p.setPosition(x, y, z); }
+/** 듣는 사람(나) 위치·방향 갱신. */
+function setListener(x, y, z, yaw) {
+  const L = ac.listener, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  if (L.positionX) { L.positionX.value = x; L.positionY.value = y; L.positionZ.value = z; L.forwardX.value = fx; L.forwardY.value = 0; L.forwardZ.value = fz; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+  else { L.setPosition(x, y, z); L.setOrientation(fx, 0, fz, 0, 1, 0); }
+}
+/** 그 위치에서 나는 발소리 한 번. */
+function stepAt(panner, vol) {
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime;
+  s.buffer = noise(); f.type = "lowpass"; f.frequency.value = 420;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  s.connect(f); f.connect(g); g.connect(panner); s.start(t); s.stop(t + 0.15);
+}
+/** 객석 전체가 한꺼번에 웃는 소리 (하, 하, 하, 하). */
+function crowdLaugh() {
+  [0, 210, 420, 630].forEach((ms) => setTimeout(() => {
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime;
+    s.buffer = noise(); f.type = "bandpass"; f.frequency.value = 900; f.Q.value = 2.5;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.16, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + 0.2);
+    laugh(0.012);
+  }, ms));
+}
+
+/* ===================== 계단 4: 서커스 (3D 1인칭) ===================== */
+// 두 공간을 한 장면에 둔다: 원점의 천막(객석에 앉아 관람), x=100 쪽의 무대 뒤 복도(정해진 길로 도망).
+const W3 = { yaw: 0, pitch: 0, x: 0, z: 2, eyeY: 1.25, keys: {}, joy: null, look: null, last: 0, ended: true, auto: null,
+  phase: "tent", watch: true, audience: [], house: 0.8, bob: 0, trail: [],
+  dan: { x: 0, z: 0, mode: "off", ti: 0, t: 0, panner: null, step: 0 }, seoa: { x: 0, z: 0 }, si: 0 };
+let renderer, scene3, camera;
+const EXITS = [0, 1, 2, 3, 4, 5].map((i) => (i / 6) * Math.PI * 2 + 0.26); // 천막 틈 여섯 곳 (각도)
+
+/** 캔버스로 작은 텍스처를 만든다 (픽셀 그대로, PS1 느낌). */
+function canvasTex(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; return t;
+}
+/** 앉은 관객 그림 (얼굴은 작은 점 두 개). seed로 옷·머리색이 바뀐다. blank면 눈이 없다. */
+function audienceTex(seed, white, blank) {
+  const r = seeded(seed + 3), shirts = ["#5a6a8a", "#7a5a4a", "#3a5a4a", "#8a8a7a", "#6a3a3a", "#4a4a5a"], hairs = ["#16110f", "#3a2a1a", "#555", "#16110f"];
+  return canvasTex(16, 24, (g) => {
+    g.fillStyle = hairs[Math.floor(r() * 4)]; g.fillRect(5, 2, 6, 3);
+    g.fillStyle = "#d8cdbd"; g.fillRect(5, 4, 6, 6);
+    g.fillStyle = "#111"; if (!blank) { g.fillRect(6, 6, 1, 1); g.fillRect(9, 6, 1, 1); }
+    g.fillStyle = white ? "#e6eadf" : shirts[Math.floor(r() * 6)]; g.fillRect(3, 10, 10, 9); g.fillRect(2, 11, 2, 6); g.fillRect(12, 11, 2, 6);
+    g.fillStyle = "#2a2a3a"; g.fillRect(4, 19, 8, 3);
+  });
+}
+/** 서 있는 사람 그림 (셔츠 색만 다르게). blank면 눈이 없다. */
+function standTex(shirt, blank) {
+  return canvasTex(16, 40, (g) => { g.fillStyle = "#16110f"; g.fillRect(5, 0, 6, 3); g.fillStyle = "#d8cdbd"; g.fillRect(5, 2, 6, 7); g.fillStyle = "#111"; if (!blank) { g.fillRect(6, 5, 1, 1); g.fillRect(9, 5, 1, 1); }
+    g.fillStyle = shirt; g.fillRect(3, 9, 10, 15); g.fillStyle = "#2a2a3a"; g.fillRect(4, 24, 3, 15); g.fillRect(9, 24, 3, 15); });
+}
+/** 늘 나를 향해 도는 평면 그림 하나. */
+function addBillboard(tex, w, h, x, y, z) {
+  tex.magFilter = THREE.NearestFilter;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.4 }));
+  m.position.set(x, y, z); m.userData.baseY = y; scene3.add(m); return m;
+}
+const lam = (c, map, side) => new THREE.MeshLambertMaterial({ color: c, map: map || null, side: side || THREE.FrontSide });
+const add3 = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); scene3.add(m); return m; };
+
+/** 3D 장면을 한 번 짓는다: 천막(객석·관객·공연 소품)과 무대 뒤 복도. */
+function buildCircus() {
+  renderer = new THREE.WebGLRenderer({ canvas: $("gl"), antialias: false }); renderer.setPixelRatio(1);
+  scene3 = new THREE.Scene(); scene3.background = new THREE.Color(0x03110c); scene3.fog = new THREE.Fog(0x03110c, 3, 22);
+  camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80); camera.rotation.order = "YXZ";
+  resize3D();
+  scene3.add(new THREE.AmbientLight(0x6fae8c, 0.5));
+  W3.lights = [[0, 0], [4, 3], [-4, -3]].map(([x, z]) => { const p = new THREE.PointLight(0xcfffe0, 0.8, 14); p.position.set(x, 5, z); scene3.add(p); return p; });
+  W3.lamp = new THREE.PointLight(0xcfffe0, 0, 9); scene3.add(W3.lamp); // 복도에서 내 주변만 비추는 빛
+  // 무대 바닥(톱밥)과 둘레 턱
+  const dust = canvasTex(32, 32, (g) => { const r = seeded(9); for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const v = 110 + Math.floor(r() * 40); g.fillStyle = `rgb(${v},${v * 0.8 | 0},${v * 0.5 | 0})`; g.fillRect(x, y, 1, 1); } });
+  dust.wrapS = dust.wrapT = THREE.RepeatWrapping; dust.repeat.set(4, 4);
+  add3(new THREE.CircleGeometry(8.2, 24), lam(0xffffff, dust), 0, 0, 0).rotation.x = -Math.PI / 2;
+  add3(new THREE.CylinderGeometry(8.3, 8.3, 0.4, 24, 1, true), lam(0xa83a2a, null, THREE.DoubleSide), 0, 0.2, 0);
+  // 천막 벽과 지붕 (무너질 때 땅으로 꺼진다)
+  const stripes = canvasTex(64, 8, (g) => { for (let x = 0; x < 64; x += 8) { g.fillStyle = "#6a2a24"; g.fillRect(x, 0, 4, 8); g.fillStyle = "#8a7a62"; g.fillRect(x + 4, 0, 4, 8); } });
+  stripes.wrapS = THREE.RepeatWrapping; stripes.repeat.set(4, 1);
+  W3.tent = [add3(new THREE.CylinderGeometry(13, 13, 5, 24, 1, true), lam(0xffffff, stripes, THREE.BackSide), 0, 2.5, 0),
+    add3(new THREE.ConeGeometry(13, 7, 24, 1, true), lam(0x4a2a24, stripes, THREE.BackSide), 0, 8.5, 0)];
+  EXITS.forEach((a) => { const m = add3(new THREE.PlaneGeometry(1.6, 2.6), new THREE.MeshBasicMaterial({ color: 0x010403 }), Math.cos(a) * 12.9, 1.3, Math.sin(a) * 12.9); m.lookAt(0, 1.3, 0); W3.tent.push(m); });
+  W3.tent.forEach((m) => (m.userData.y0 = m.position.y));
+  add3(new THREE.CircleGeometry(60, 24), lam(0x1d3a30), 0, -0.01, 0).rotation.x = -Math.PI / 2;
+  // 천막인데 천장에 사무실 형광등. 천막 밖에는 끝없는 사무실 천장 (무너진 뒤에만 보인다)
+  W3.tubes = [];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, m = add3(new THREE.BoxGeometry(1.4, 0.05, 0.14), new THREE.MeshBasicMaterial({ color: 0xdfffe8 }), Math.cos(a) * 5, 5.2, Math.sin(a) * 5); m.rotation.y = -a; W3.tubes.push(m); }
+  W3.outside = new THREE.Group(); W3.outside.visible = false; scene3.add(W3.outside);
+  for (let x = -40; x <= 40; x += 5) for (let z = -40; z <= 40; z += 5) if (Math.hypot(x, z) > 15) { const m = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.05, 0.14), new THREE.MeshBasicMaterial({ color: 0xdfffe8 })); m.position.set(x, 3.2, z); W3.outside.add(m); }
+  // 객석 4단. 맨 앞줄 8·9번은 나와 서아 자리, 7번은 옆자리 사람
+  const seatMat = lam(0x24406a), r = seeded(17);
+  const nearExit = (a) => EXITS.some((e) => Math.abs(((a - e + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.22);
+  for (let tier = 0; tier < 4; tier++) for (let i = 0; i < 28; i++) {
+    const a = i / 28 * Math.PI * 2, rad = 9 + tier * 0.9, h = 0.45 * (tier + 1);
+    if (nearExit(a)) continue;
+    add3(new THREE.BoxGeometry(1.8, h, 0.85), seatMat, Math.cos(a) * rad, h / 2, Math.sin(a) * rad).rotation.y = -a + Math.PI / 2;
+    const pos = { x: Math.cos(a) * (rad - 0.1), y: h + 0.45, z: Math.sin(a) * (rad - 0.1), a };
+    if (tier === 0 && i === 8) { W3.mySeat = pos; continue; }
+    if (tier === 0 && i === 9) { W3.seoaSeat = pos; continue; }
+    if (r() < 0.6 || (tier === 0 && i === 7)) {
+      const m = addBillboard(audienceTex(tier * 31 + i, tier === 0 && i === 7), 0.6, 0.9, pos.x, pos.y, pos.z); m.userData.seed = tier * 31 + i; W3.audience.push(m);
+      if (tier === 0 && i === 7) W3.neighbor = m;
+    }
+  }
+  W3.blankTex = audienceTex(7, true, true);
+  // 단장: 키 큰 검은 형체, 얼굴 자리만 희다
+  const danTex = canvasTex(24, 72, (g) => { g.fillStyle = "#050505"; g.fillRect(5, 0, 14, 6); g.fillRect(3, 16, 18, 56); g.fillStyle = "#e8e2d8"; g.fillRect(7, 5, 10, 11); g.fillStyle = "#050505"; g.fillRect(8, 12, 8, 1); });
+  W3.danMesh = addBillboard(danTex, 0.85, 2.6, 0, 1.3, 0); W3.danMesh.visible = false;
+  W3.dan.panner = makePanner(0, 0.2, -30);
+  // 서아: 미연시 그림이 그대로 3D 안에 떠 있다
+  const loader = new THREE.TextureLoader();
+  W3.seoaTex = { calm: loader.load("img/seoa-calm.png"), worry: loader.load("img/seoa-worry.png"), wrong: loader.load("img/seoa-wrong.png") };
+  W3.seoaMesh = addBillboard(W3.seoaTex.calm, 0.62, 0.82, 0, 1.2, 0);
+  // 공연 소품: 저글러(공 셋), 광대(서 있는/넘어진)
+  W3.props = [];
+  const prop = (tex) => { const m = addBillboard(tex, 0.55, 1.8, 0, 0.9, 0); m.visible = false; W3.props.push(m); return m; };
+  W3.juggler = prop(standTex("#a83a2a"));
+  W3.balls = ["#e8d040", "#d04040", "#40a0d0"].map((c) => { const b = add3(new THREE.SphereGeometry(0.08, 6, 4), new THREE.MeshBasicMaterial({ color: c }), 0, -5, 0); b.visible = false; return b; });
+  const clown = (g) => { g.fillStyle = "#e8e2d8"; g.fillRect(5, 1, 6, 8); g.fillStyle = "#d02020"; g.fillRect(7, 5, 2, 2); g.fillStyle = "#111"; g.fillRect(6, 3, 1, 1); g.fillRect(9, 3, 1, 1);
+    g.fillStyle = "#3a6ad0"; g.fillRect(2, 9, 12, 16); g.fillStyle = "#e8d040"; g.fillRect(6, 11, 4, 4); g.fillStyle = "#d02020"; g.fillRect(3, 25, 4, 14); g.fillRect(9, 25, 4, 14); };
+  W3.clown = prop(canvasTex(16, 40, clown));
+  buildBackstage();
+  bind3D();
+}
+
+/* ---------- 무대 뒤 복도: 칸 하나 = 2m ---------- */
+// #=벽 .=바닥 D=문 S=시작(단장도 여기로 들어온다) E=비상구
+// 길: 아래 긴 복도(앞에 단장) → 위 문(13,6) → 분장실(숨기) → 서쪽 문(8,4) → 갈림길(5,4): 위는 막다른 길, 왼쪽이 비상구
+const BACK = [
+  "####################",
+  "#E###...############",
+  "#.###.##############",
+  "#.###.###...D.######",
+  "#.......D...#.######",
+  "#########...#.######",
+  "#############D######",
+  "#..................#",
+  "#.##################",
+  "#S##################",
+  "####################",
+];
+const BX = 100, BC = 2;
+const cw = (cx) => BX + cx * BC + BC / 2, cz = (cy) => cy * BC + BC / 2; // 칸 → 세계 좌표(칸 가운데)
+const ROUTE = [[1, 8], [1, 7], [8, 7], [13, 7], [13, 5], [13, 3], [12, 3], [10, 4]]; // 서아가 앞서 가는 길 (분장실까지)
+const HIDE = { x: cw(9) + 0.3, z: cz(5) + 0.5 };                                  // 옷걸이 뒤 숨는 자리
+/** 그 자리의 칸 글자 (밖이면 벽). */
+function cellAt(x, z) { const row = BACK[Math.floor(z / BC)]; return (row && row[Math.floor((x - BX) / BC)]) || "#"; }
+/** 지나갈 수 있는 자리인지 (닫힌 문은 벽). */
+function walkable(x, z) {
+  const c = cellAt(x, z); if (c === "#") return false;
+  if (c === "D" || c === "E") { const d = W3.doors[Math.floor((x - BX) / BC) + "," + Math.floor(z / BC)]; return d && d.open; }
+  return true;
+}
+/** 복도를 짓는다: 바닥·천장·벽·문·형광등·분장실(거울, 얼굴 없는 사람들, 옷걸이)·막다른 길의 사람·비상구 표지. */
+function buildBackstage() {
+  const W = BACK[0].length, H = BACK.length;
+  const lino = canvasTex(16, 16, (g) => { for (let y = 0; y < 16; y += 8) for (let x = 0; x < 16; x += 8) { g.fillStyle = (x + y) % 16 ? "#5d6b62" : "#77857a"; g.fillRect(x, y, 8, 8); } });
+  lino.wrapS = lino.wrapT = THREE.RepeatWrapping; lino.repeat.set(W, H);
+  add3(new THREE.PlaneGeometry(W * BC, H * BC), lam(0xffffff, lino), BX + W, 0, H).rotation.x = -Math.PI / 2;
+  add3(new THREE.PlaneGeometry(W * BC, H * BC), lam(0x2a3a32), BX + W, 3, H).rotation.x = Math.PI / 2;
+  const paint = canvasTex(16, 24, (g) => { g.fillStyle = "#8fa898"; g.fillRect(0, 0, 16, 24); g.fillStyle = "#4f6458"; g.fillRect(0, 16, 16, 8); g.fillStyle = "#2a3a32"; g.fillRect(0, 15, 16, 1); });
+  const wallMat = lam(0xffffff, paint), doorMat = lam(0x55625a), wallGeo = new THREE.BoxGeometry(BC, 3, BC);
+  W3.doors = {}; W3.backLights = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = BACK[y][x], open = (dx, dy) => (BACK[y + dy] || "#")[x + dx] && (BACK[y + dy] || "#")[x + dx] !== "#";
+    if (c === "#") { if (open(1, 0) || open(-1, 0) || open(0, 1) || open(0, -1)) add3(wallGeo, wallMat, cw(x), 1.5, cz(y)); continue; }
+    if (c === "D" || c === "E") { // 통로를 가로막는 얇은 문 (열리면 천장으로 올라간다)
+      const across = open(1, 0) || open(-1, 0) ? "z" : "x";
+      const m = add3(across === "x" ? new THREE.BoxGeometry(BC, 3, 0.15) : new THREE.BoxGeometry(0.15, 3, BC), c === "E" ? lam(0x3a5a48) : doorMat, cw(x), 1.5, cz(y));
+      W3.doors[x + "," + y] = { mesh: m, open: false, t: 0, exit: c === "E", x: cw(x), z: cz(y) };
+    }
+    if ((x + y) % 2 === 0) { const t = add3(new THREE.BoxGeometry(0.14, 0.05, 1.4), new THREE.MeshBasicMaterial({ color: 0xdfffe8 }), cw(x), 2.97, cz(y)); W3.backLights.push(t); }
+  }
+  // 비상구 표지 (E 문 위, 남쪽을 본다)
+  const sign = canvasTex(32, 12, (g) => { g.fillStyle = "#052"; g.fillRect(0, 0, 32, 12); g.fillStyle = "#7f8"; g.font = "9px sans-serif"; g.fillText("비상구", 3, 10); });
+  add3(new THREE.PlaneGeometry(1.1, 0.4), new THREE.MeshBasicMaterial({ map: sign }), cw(1), 2.6, cz(1) + 0.9);
+  // 분장실: 북쪽 벽에 거울 줄, 얼굴 없는 흰 셔츠 사람들, 남쪽에 옷 걸린 행거 (그 뒤에 숨는다)
+  for (let i = 0; i < 3; i++) add3(new THREE.PlaneGeometry(1.2, 0.9), new THREE.MeshBasicMaterial({ color: 0xa8c4b6 }), cw(9 + i), 1.6, cz(3) - 0.99);
+  W3.dressers = [[9.3, 3.4], [10.6, 3.6], [11.5, 3.9], [11.6, 4.8]].map(([x, y]) => addBillboard(standTex("#d8dccf", true), 0.55, 1.8, BX + x * BC, 0.9, y * BC));
+  const cloth = ["#6a3a3a", "#3a4a6a", "#8a7a62", "#2a3a2a", "#7a5a4a", "#5a5a6a", "#a83a2a"];
+  add3(new THREE.BoxGeometry(2.6, 0.05, 0.05), lam(0x888888), HIDE.x + 0.2, 1.75, HIDE.z - 0.75);
+  for (let i = 0; i < 7; i++) add3(new THREE.BoxGeometry(0.15, 1.1, 0.1), lam(new THREE.Color(cloth[i % 7]).getHex()), HIDE.x - 0.9 + i * 0.38, 1.25, HIDE.z - 0.75); // 틈 사이로 밖이 보인다
+  // 막다른 길 끝에 서 있는 사람 (가까이 가면 사라진다)
+  W3.deadFig = addBillboard(standTex("#d8dccf", true), 0.55, 1.8, cw(7), 0.9, cz(1)); W3.dressers.push(W3.deadFig);
+  W3.voice = makePanner(cw(1), 1, cz(2)); // 서아 목소리가 나는 곳 (비상구 쪽)
+}
+/** 그 자리에서 서아 목소리 (말은 안 들리고 높낮이만). */
+function voiceAt(p) {
+  [0, 120, 240, 380].forEach((ms, i) => setTimeout(() => {
+    const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = "triangle"; o.frequency.value = [360, 420, 380, 300][i];
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(g); g.connect(p); o.start(t); o.stop(t + 0.12);
+  }, ms));
+}
+/** 3D 캔버스를 낮은 해상도로 (가로 170픽셀을 크게 늘려 거칠게). */
+function resize3D() {
+  if (!renderer) return;
+  const r = $("app").getBoundingClientRect(), w = 170, h = Math.round(170 * r.height / Math.max(1, r.width));
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize3D);
+/** 조작: 마우스는 어디를 끌어도 둘러보기. 손가락은 왼쪽 아래에서 조이스틱, 나머지는 둘러보기. 키보드 WASD·방향키도. */
+function bind3D() {
+  const cv = $("gl"), stick = $("stick");
+  cv.addEventListener("pointerdown", (e) => {
+    if (W3.ended || W3.auto || W3.cut || !box.hidden) return;
+    const r = cv.getBoundingClientRect(), lx = (e.clientX - r.left) / r.width, ly = (e.clientY - r.top) / r.height;
+    cv.setPointerCapture(e.pointerId);
+    if (e.pointerType !== "mouse" && !W3.watch && lx < 0.5 && ly > 0.55) { W3.joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 }; stick.hidden = false; stick.style.left = e.clientX - $("app").getBoundingClientRect().left + "px"; stick.style.top = e.clientY - $("app").getBoundingClientRect().top + "px"; }
+    else W3.look = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  });
+  cv.addEventListener("pointermove", (e) => {
+    if (W3.joy && e.pointerId === W3.joy.id) { W3.joy.dx = Math.max(-1, Math.min(1, (e.clientX - W3.joy.x0) / 50)); W3.joy.dy = Math.max(-1, Math.min(1, (e.clientY - W3.joy.y0) / 50)); }
+    else if (W3.look && e.pointerId === W3.look.id) {
+      W3.yaw -= (e.clientX - W3.look.x) * 0.006; W3.pitch = Math.max(-0.7, Math.min(0.7, W3.pitch - (e.clientY - W3.look.y) * 0.004));
+      W3.look.x = e.clientX; W3.look.y = e.clientY;
+    }
+  });
+  const end = (e) => { if (W3.joy && e.pointerId === W3.joy.id) { W3.joy = null; stick.hidden = true; } if (W3.look && e.pointerId === W3.look.id) W3.look = null; };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  window.addEventListener("keydown", (e) => { W3.keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { W3.keys[e.key.toLowerCase()] = false; });
+}
+/** 형광등이 잠깐 꺼졌다 켜진다. */
+function flicker3() {
+  W3.lights.forEach((l) => (l.intensity = 0.1)); W3.tubes.concat(W3.backLights).forEach((m) => m.material.color.setHex(0x223a30));
+  setTimeout(() => { W3.lights.forEach((l) => (l.intensity = W3.house)); W3.tubes.concat(W3.backLights).forEach((m) => m.material.color.setHex(0xdfffe8)); }, 90 + Math.random() * 120);
+}
+let circusHooks = null;
+/** 복도에서 걷기: 벽에 닿으면 그 축만 막는다 (몸 반지름 0.3). */
+function moveBack(dx, dz) {
+  const ok = (x, z) => walkable(x - 0.3, z - 0.3) && walkable(x + 0.3, z - 0.3) && walkable(x - 0.3, z + 0.3) && walkable(x + 0.3, z + 0.3);
+  if (!ok(W3.x, W3.z)) { W3.x += dx; W3.z += dz; return; } // 문이 몸에 걸쳐 닫혔으면 빠져나오게 둔다
+  if (ok(W3.x + dx, W3.z)) W3.x += dx;
+  if (ok(W3.x, W3.z + dz)) W3.z += dz;
+}
+/** 문: 나나 서아가 가까이 오면 철컥 소리 뒤에 열린다. 비상구 문은 열리지 않는다. */
+function tickDoors(now) {
+  Object.values(W3.doors).forEach((d) => {
+    d.mesh.position.y += ((d.open ? 4.4 : 1.5) - d.mesh.position.y) * 0.25;
+    if (d.exit || d.locked) return;
+    const near = Math.hypot(W3.x - d.x, W3.z - d.z) < 1.9 || Math.hypot(W3.seoa.x - d.x, W3.seoa.z - d.z) < 1.4;
+    if (near && !d.open && !d.t) { d.t = now + 350; burst(700, 0.06, 0.15); }
+    if (d.t && now > d.t && !d.open) { d.open = true; burst(260, 0.25, 0.12); }
+  });
+}
+/** 복도의 단장: 처음엔 내가 지나온 자리를 그대로 밟아 온다. 앞길에 나타났을 땐 곧장 다가온다. */
+function tickDan(now, dt) {
+  const D = W3.dan; if (D.mode === "off" || D.mode === "wait") return;
+  if (D.mode === "start") { if (now < D.t) return; D.mode = "trail"; D.ti = 0; Object.assign(D, { x: cw(1), z: cz(9) }); W3.danMesh.visible = true; burst(200, 0.3, 0.3); }
+  let tx, tz, sp;
+  if (D.mode === "trail") { const p = W3.trail[Math.min(D.ti, W3.trail.length - 1)]; if (!p) return; tx = p.x; tz = p.z; sp = 2.25; }
+  else { tx = W3.x; tz = W3.z; sp = 1.9; } // ahead
+  const dx = tx - D.x, dz = tz - D.z, d = Math.hypot(dx, dz);
+  if (d < 0.12) { if (D.mode === "trail" && D.ti < W3.trail.length - 1) D.ti++; }
+  else { const s = Math.min(d, sp * dt), nx = D.x + dx / d * s, nz = D.z + dz / d * s; if (D.mode === "trail" || walkable(nx, nz)) { D.x = nx; D.z = nz; } }
+  D.step += dt; if (D.step > 0.34) { D.step = 0; stepAt(D.panner, 1.2); }
+  setPannerPos(D.panner, D.x, 0.2, D.z);
+  if (Math.hypot(W3.x - D.x, W3.z - D.z) < 0.8) circusHooks.caught();
+}
+/** 서아가 정해진 길을 앞서 간다. 내가 가까이 와야 다음 자리로 옮긴다. */
+function tickSeoa(dt) {
+  if (W3.seoaGone) return;
+  const t = ROUTE[W3.si], tx = cw(t[0]), tz = cz(t[1]), dx = tx - W3.seoa.x, dz = tz - W3.seoa.z, d = Math.hypot(dx, dz);
+  if (d > 0.05) { const s = Math.min(d, 3.4 * dt); W3.seoa.x += dx / d * s; W3.seoa.z += dz / d * s; }
+  else if (W3.si < ROUTE.length - 1 && Math.hypot(W3.x - tx, W3.z - tz) < 3.6) W3.si++;
+}
+/** 3D 한 프레임. */
+function frame3(now) {
+  if (W3.ended) return;
+  const dt = Math.min(0.05, (now - (W3.last || now)) / 1000); W3.last = now;
+  const k = W3.keys;
+  if (W3.auto) { // 저절로 끌려가는 중
+    const a = W3.auto, p = Math.min(1, (now - a.t0) / a.ms);
+    W3.x = a.from.x + (a.to.x - a.from.x) * p; W3.z = a.from.z + (a.to.z - a.from.z) * p;
+    W3.yaw += (a.yaw - W3.yaw) * 0.05; W3.pitch *= 0.95;
+    if (p >= 1 && a.done) { const d = a.done; a.done = null; d(); }
+  } else if (box.hidden && !W3.cut) {
+    let fwd = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0), side = (k.d ? 1 : 0) - (k.a ? 1 : 0);
+    if (k.arrowleft) W3.yaw += 1.8 * dt; if (k.arrowright) W3.yaw -= 1.8 * dt;
+    if (W3.joy) { fwd = -W3.joy.dy; side = W3.joy.dx; }
+    if (!W3.watch && (fwd || side)) {
+      const sp = 2.7 * dt;
+      moveBack((-Math.sin(W3.yaw) * fwd + Math.cos(W3.yaw) * side) * sp, (-Math.cos(W3.yaw) * fwd - Math.sin(W3.yaw) * side) * sp);
+      W3.stepAcc = (W3.stepAcc || 0) + dt; if (W3.stepAcc > 0.3) { W3.stepAcc = 0; burst(500, 0.05, 0.06); }
+    }
+  }
+  if (W3.lookTarget) { const p = W3.lookTarget.position; let d = Math.atan2(-(p.x - W3.x), -(p.z - W3.z)) - W3.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); W3.yaw += d * 0.06; W3.pitch *= 0.9; }
+  camera.position.set(W3.x + (W3.shake ? (Math.random() - 0.5) * 0.08 : 0), W3.eyeY, W3.z); camera.rotation.y = W3.yaw; camera.rotation.x = W3.pitch;
+  setListener(W3.x, W3.eyeY, W3.z, W3.yaw);
+  if (W3.phase === "back") {
+    W3.lamp.position.set(W3.x, 2.4, W3.z);
+    const last = W3.trail[W3.trail.length - 1];
+    if (!last || Math.hypot(W3.x - last.x, W3.z - last.z) > 0.3) W3.trail.push({ x: W3.x, z: W3.z });
+    if (!W3.cut && !W3.auto) { tickDoors(now); tickSeoa(dt); tickDan(now, dt); }
+    if (!W3.cut && !W3.auto) circusHooks.backTick(now);
+    if (Math.random() < 0.004) flicker3();
+  }
+  W3.seoaMesh.position.set(W3.seoa.x, (W3.phase === "back" ? 1.35 : 1.2) + Math.sin(now / 900) * 0.03, W3.seoa.z); W3.seoaMesh.lookAt(camera.position);
+  // 관객·소품·분장실 사람들은 늘 나를 본다. 웃을 때 관객이 다 같이 들썩인다
+  const lift = now - W3.bob < 800 ? Math.abs(Math.sin((now - W3.bob) / 800 * Math.PI * 4)) * 0.06 : 0;
+  W3.audience.forEach((m) => { m.position.y = m.userData.baseY + lift; m.lookAt(camera.position.x, m.position.y, camera.position.z); });
+  if (W3.juggler.visible) { // 공 셋이 내 쪽에서 보이는 면으로 돈다. 떠오를 때는 공이 혼자 머리 둘레를 돈다
+    const j = W3.juggler.position, dx = camera.position.x - j.x, dz = camera.position.z - j.z, n = Math.hypot(dx, dz) || 1;
+    const f = W3.floatJ ? Math.min(1, (now - W3.floatJ) / 4000) : 0; j.y = 0.9 + f * 1.1; W3.juggler.userData.tilt = f * 0.6;
+    W3.balls.forEach((b, i) => { b.visible = true;
+      if (f > 0) { const ph = now / 150 + i * 2.09; b.position.set(j.x + Math.cos(ph) * 0.45, j.y + 0.95 + Math.sin(ph * 2) * 0.1, j.z + Math.sin(ph) * 0.45); return; }
+      const ph = now / 350 + i * 2.09;
+      b.position.set(j.x - dz / n * Math.cos(ph) * 0.3 + dx / n * 0.15, 1.75 + Math.abs(Math.sin(ph)) * 0.55, j.z + dx / n * Math.cos(ph) * 0.3 + dz / n * 0.15); });
+  } else W3.balls.forEach((b) => (b.visible = false));
+  W3.props.concat(W3.dressers).forEach((m) => { if (!m.visible) return; m.lookAt(camera.position.x, m.position.y, camera.position.z); if (m.userData.tilt) m.rotateZ(m.userData.tilt); });
+  if (W3.danMesh.visible) {
+    if (W3.dan.mode !== "off") W3.danMesh.position.set(W3.dan.x, 1.3, W3.dan.z);
+    W3.danMesh.lookAt(camera.position.x, 1.3, camera.position.z);
+  }
+  renderer.render(scene3, camera);
+  requestAnimationFrame(frame3);
+}
+
+/* ---------- 천막 공연에 쓰는 것들 ---------- */
+/** 박수: sec초 동안 짧은 잡음이 흩어져 난다. */
+function clap(sec) { for (let i = 0; i < sec * 28; i++) setTimeout(() => burst(1600 + Math.random() * 1600, 0.03, 0.04 + Math.random() * 0.05), Math.random() * sec * 1000); }
+/** 객석 조명 밝기. 깜빡임이 끝나면 이 밝기로 돌아온다. */
+function house(v) { W3.house = v; W3.lights.forEach((l) => (l.intensity = v)); }
+/** 그림을 to까지 ms 동안 걸어 옮긴다 (발소리와 함께, 몸은 돌리지 않는다). */
+async function walkTo(m, to, ms) {
+  const fx = m.position.x, fz = m.position.z, n = Math.max(1, Math.round(ms / 60));
+  for (let k = 1; k <= n; k++) { m.position.x = fx + (to.x - fx) * k / n; m.position.z = fz + (to.z - fz) * k / n; if (k % 8 === 0) burst(500, 0.05, 0.05); await wait(60); }
+}
+/** 시선을 m 쪽으로 ms 동안 돌려 둔다. */
+async function lookAtFor(m, ms) { W3.cut = true; W3.lookTarget = m; await wait(ms); W3.lookTarget = null; W3.cut = false; }
+/** 서커스 행진곡 (네모파 멜로디 + 쿵짝). rate가 커지면 느려지고, pitch로 음이 틀어진다. */
+function startMarch() {
+  const mel = ORGEL.map((m) => m - 12), bass = [48, 55, 48, 55, 50, 55, 43, 55];
+  const g = ac.createGain(); g.gain.value = 0.022; g.connect(master);
+  const M = { rate: 1, pitch: 0, alive: true, i: 0, stop() { M.alive = false; } };
+  const note = (m, len, type, vol) => { const t = ac.currentTime, o = ac.createOscillator(), e = ac.createGain(); o.type = type; o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+    e.gain.setValueAtTime(vol, t); e.gain.exponentialRampToValueAtTime(0.001, t + len); o.connect(e); e.connect(g); o.start(t); o.stop(t + len + 0.05); };
+  const play = () => { if (!M.alive) return; const i = M.i++;
+    note(mel[i % mel.length] + M.pitch, 0.2 * M.rate, "square", 0.5); if (i % 2 === 0) note(bass[(i / 2) % 8] + M.pitch, 0.25 * M.rate, "triangle", 0.9);
+    setTimeout(play, 250 * M.rate); };
+  play(); return M;
+}
+/** 복도 추격을 처음 상태로 (시작할 때, 잡혔을 때). */
+function resetBack() {
+  W3.phase = "back"; W3.watch = false; W3.eyeY = 1.55; W3.seoaFixed = false;
+  W3.x = cw(1); W3.z = cz(8); W3.yaw = 0; W3.pitch = 0; W3.trail = [];
+  W3.seoa = { x: cw(1), z: cz(7) }; W3.si = 1; W3.seoaGone = false; W3.seoaAtExit = false; W3.seoaMesh.visible = true;
+  Object.values(W3.doors).forEach((d) => { d.open = false; d.t = 0; d.locked = false; d.mesh.position.y = 1.5; });
+  W3.doors["8,4"].locked = true; // 분장실 서쪽 문은 숨기가 끝나야 열린다
+  Object.assign(W3.dan, { mode: "start", t: performance.now() + 4000, x: cw(1), z: cz(9) }); W3.danMesh.visible = false;
+  W3.aheadDone = false; W3.slamDone = false; W3.hide = 0; W3.nextVoice = 0; W3.deadFig.visible = true;
+  scene3.fog.near = 1.5; scene3.fog.far = 13; W3.lamp.intensity = 0.9; house(0.4);
+}
+/** 분장실 숨기: 단장이 문을 부수고 들어와 옷걸이 바로 앞에 멈췄다가 나간다. 그 사이 서아가 사라진다. */
+async function hideScene() {
+  const D = W3.dan, d2 = W3.doors["12,3"], dan = W3.danMesh;
+  W3.cut = true; W3.x = HIDE.x; W3.z = HIDE.z; W3.eyeY = 1.0; W3.trail.push({ x: HIDE.x, z: HIDE.z });
+  W3.lookTarget = { position: new THREE.Vector3(cw(11), 1, cz(3)) }; await wait(1600);
+  burst(90, 0.3, 0.45); await wait(800); burst(90, 0.3, 0.5); await wait(600);
+  W3.seoaGone = true; W3.seoaMesh.visible = false; // 불이 깜빡이는 사이 서아가 사라진다
+  d2.open = true; burst(70, 0.6, 0.5); flicker3();
+  D.mode = "off"; dan.position.set(d2.x, 1.3, d2.z); dan.visible = true; W3.lookTarget = dan;
+  await walkTo(dan, { x: cw(11), z: cz(4) }, 1500);
+  await walkTo(dan, { x: HIDE.x + 0.3, z: HIDE.z - 1.5 }, 1900);
+  await wait(2800); // 옷걸이 바로 앞에 멈춰 선다
+  flicker3();
+  await walkTo(dan, { x: cw(11), z: cz(4) }, 1600); await walkTo(dan, { x: d2.x, z: d2.z }, 1000);
+  dan.visible = false; d2.open = false; burst(120, 0.4, 0.4);
+  W3.lookTarget = null; await wait(1600);
+  const d3 = W3.doors["8,4"]; d3.locked = false; d3.open = true; burst(260, 0.25, 0.15);
+  W3.eyeY = 1.55; W3.hide = 3; W3.cut = false;
+  vn.face = "worry"; await say(S, "……여기야.", { small: true }); box.hidden = true; voiceAt(W3.voice); W3.nextVoice = performance.now() + 4500;
+  // 단장은 잠시 뒤 다시 문을 부수고 내 발자국을 따라온다
+  setTimeout(() => {
+    if (W3.phase !== "back" || W3.hide !== 3) return;
+    d2.open = true; burst(70, 0.6, 0.5); flicker3();
+    let ti = 0, best = 1e9; W3.trail.forEach((p, i) => { const d = Math.hypot(p.x - d2.x, p.z - d2.z); if (d < best) { best = d; ti = i; } });
+    Object.assign(D, { mode: "trail", ti, x: d2.x, z: d2.z }); dan.visible = true;
+  }, 7000);
+}
+/** 아침 소리: 먼 차 소리와 가끔 새. 멈추는 함수를 돌려준다. */
+function startMorning() {
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noise(); s.loop = true; f.type = "lowpass"; f.frequency.value = 400; g.gain.value = 0.05; s.connect(f); f.connect(g); g.connect(master); s.start();
+  const id = setInterval(() => {
+    if (Math.random() < 0.5) return;
+    for (let i = 0; i < 2 + Math.random() * 3; i++) setTimeout(() => {
+      const o = ac.createOscillator(), og = ac.createGain(), t = ac.currentTime;
+      o.type = "sine"; o.frequency.setValueAtTime(2600, t); o.frequency.exponentialRampToValueAtTime(3900, t + 0.08);
+      og.gain.setValueAtTime(0.03, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1); o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.12);
+    }, i * 140);
+  }, 1700);
+  return () => { clearInterval(id); try { s.stop(); } catch (e) {} };
+}
+
+/* ===================== 0장: 일상 (아주 짧게) ===================== */
+/** 평일 밤 자취방 → 오래된 컴퓨터에 초대장 → 초록 빛이 둘을 덮는다. */
+async function ch0Daily() {
+  $("vn").hidden = false; vn.scene = "studio"; vn.day = false; vn.crt = 0;
+  await say("", "(평일 밤. 내 자취방. 서아가 퇴근길에 들렀다.)");
+  vn.face = "worry"; await say(S, "팀장이 또 금요일 여섯 시에 회의 잡았어.");
+  const a = await choose(["또?", "그 사람 금요일에 할 게 없나 봐."]);
+  vn.face = a === 0 ? "worry" : "smile"; await say(S, a === 0 ? "또. 이번 달만 세 번째." : "그런가 봐. 불쌍하다고 생각하니까 좀 낫네.");
+  vn.face = "calm"; await say(S, "내일 뭐 먹지.");
+  const b = await choose(["순대국.", "아무거나."]);
+  await say(S, b === 0 ? "어제도 순대국이었잖아. …근데 좋아." : "아무거나가 제일 어려운 거 알지.");
+  await say("", "(서아가 가방을 내려놓는다. 가방에 달린 키링이 딸랑, 짧게 울린다.)"); jingle();
+  await say("", "(구석에 오래된 컴퓨터. 본가에서 가져온 뒤로 한 번도 안 켰다.)");
+  burst(200, 0.4, 0.15); vn.crt = 1; const hum = startHum();
+  await say("", "(컴퓨터가 혼자 켜진다. 화면에 초록 글씨.)");
+  await say("", "('초대장이 도착했습니다.')");
+  vn.face = "worry"; await say(S, "뭐야. 스팸이야? 꺼.");
+  await choose(["전원 버튼을 누른다."]);
+  await say("", "(꺼지지 않는다.)");
+  vn.face = "worry"; await say(S, "코드를 뽑아. 빨리.");
+  box.hidden = true; vn.big = false;
+  for (let k = 0; k < 24; k++) { vn.crt = 1 + k / 6; hum.frequency.value = 100 + k * 18; await wait(90); }
+  hum.stop(); const fl = $("flash"); fl.classList.add("green", "on"); burst(120, 1, 0.3); await wait(1600);
+  $("vn").hidden = true; vn.crt = 0; fl.classList.remove("on"); await wait(400); fl.classList.remove("green");
+}
+
+/* ===================== 1장: 옛날 채팅창 (누리) ===================== */
+const termLog = $("termLog"), termPick = $("termPick"), termIn = $("termIn"), thc = $("termHead").getContext("2d");
+const TERM = { skip: false, shake: 0, alive: false };
+const TWHO = { "누리": ["sys", "누리> ", NURI], "SYS": ["sys", "", NURI], "서아": ["seoa", "서아> ", 620], "나": ["me", "나> ", 500], "": ["narr", "", 0] };
+/** 채팅창 위쪽: 초록 격자 안에 도트로 선 두 사람. */
+function drawTermHead(t) {
+  if (!TERM.alive) return;
+  thc.fillStyle = "#010a05"; thc.fillRect(0, 0, 120, 40);
+  thc.fillStyle = "#0f3a20"; for (let x = 0; x < 120; x += 8) thc.fillRect(x, 0, 1, 40); for (let y = 4; y < 40; y += 8) thc.fillRect(0, y, 120, 1);
+  const j = TERM.shake ? () => Math.round((Math.random() - 0.5) * TERM.shake) : () => 0;
+  const dot = (x, y, c) => { thc.fillStyle = c; thc.fillRect(x + 1 + j(), y, 3, 3); thc.fillRect(x + j(), y + 3, 5, 5); thc.fillRect(x + 1, y + 8, 1, 3); thc.fillRect(x + 3, y + 8, 1, 3); };
+  dot(52, 22, "#e6f6d8"); dot(62, 22, "#9fd8ff");
+  requestAnimationFrame(drawTermHead);
+}
+/** 채팅창에 한 줄. 타자 치듯 나오고(누르면 바로 다 나옴), 읽을 틈을 두고 넘어간다. */
+async function tl(who, text, opts = {}) {
+  const [cls, pre, pitch] = TWHO[who] || TWHO[""];
+  const d = document.createElement("div"); d.className = cls + (opts.big ? " big" : ""); termLog.appendChild(d);
+  TERM.skip = false;
+  for (let i = 1; i <= text.length; i++) {
+    if (TERM.skip) { d.textContent = pre + text; break; }
+    d.textContent = pre + text.slice(0, i); if (i % 2 && pitch) blip(pitch + (opts.wobble ? (Math.random() - 0.5) * opts.wobble : 0), 0.022);
+    termLog.scrollTop = termLog.scrollHeight; await wait(opts.speed || 42);
+  }
+  termLog.scrollTop = termLog.scrollHeight;
+  await wait(opts.hold !== undefined ? opts.hold : 500 + text.length * 22);
+}
+$("term").addEventListener("pointerup", (e) => { if (e.target.tagName !== "BUTTON") TERM.skip = true; });
+/** 답 고르기 → 입력 칸에 쳐지고 '나>' 줄로 올라간다. 고른 번호를 돌려준다. */
+function tc(labels) {
+  return new Promise((resolve) => {
+    termPick.innerHTML = ""; const shown = performance.now();
+    labels.forEach((l, i) => {
+      const b = document.createElement("button"); b.textContent = l;
+      b.onclick = async () => {
+        if (performance.now() - shown < 400) return; termPick.innerHTML = "";
+        for (let k = 1; k <= l.length; k++) { termIn.textContent = l.slice(0, k); blip(760, 0.015); await wait(55); }
+        await wait(250); termIn.textContent = "";
+        const d = document.createElement("div"); d.className = "me"; d.textContent = "나> " + l; termLog.appendChild(d); termLog.scrollTop = termLog.scrollHeight;
+        await wait(400); resolve(i);
+      };
+      termPick.appendChild(b);
+    });
+  });
+}
+/** 1장 전체: 인사 → 질문만 하는 누리 → 폭주 → 시련 → 초기화 → 들판 문. */
+async function ch1Chat() {
+  $("term").hidden = false; termLog.innerHTML = ""; TERM.alive = true; requestAnimationFrame(drawTermHead);
+  const hum = startHum(); hum.frequency.value = 60;
+  await wait(800);
+  await tl("SYS", "반갑습니다. 낙원 서비스에 오신 것을 환영합니다.");
+  await tl("SYS", "여러분의 친절한 안내원 누리입니다.");
+  await tl("", "(초록 글씨 화면 '안'이다. 내 몸이 점 몇 개로 서 있다. 옆에 서아도.)");
+  await tl("서아", "여기 어디야?");
+  const a = await tc(["컴퓨터 안…인가?", "몰라. 일단 나가자."]);
+  await tl("서아", a === 0 ? "말도 안 돼. …나가자. 지금 당장." : "응. 나가자. 지금 당장.");
+  await tl("누리", "나가는 문은 곧 열어 드릴게요.");
+  await tl("누리", "그 전에, 몇 가지만 여쭤봐도 될까요?");
+  await tl("누리", "비 냄새는 어떤 거예요?");
+  const q1 = await tc(["흙이 젖는 냄새.", "잘 모르겠어. 그냥 비 냄새야."]);
+  await tl("누리", q1 === 0 ? "흙이 젖는… 냄새. 저장했습니다." : "그냥… 비 냄새. 그렇군요. 그렇군요.");
+  await tl("누리", "배가 고프다는 건요?");
+  const q2 = await tc(["속이 비어서 아픈 거.", "그냥 짜증 나는 거."]);
+  await tl("누리", q2 === 0 ? "아픈데, 그래도 좋아요? 좋겠다. 좋겠다좋겠다" : "짜증. 짜증도 느끼는구나. 좋겠다좋겠다", { wobble: 40 });
+  await tl("서아", "(작게) 얘 좀 이상해.");
+  await tl("나", "출구부터 알려 줘.");
+  await tl("누리", "누가 손을 잡으면요? 누가 내 손을 잡으면, 어떤 느낌이에요?", { wobble: 60 });
+  let q3 = await tc(["…따뜻해.", "대답 안 할래."]);
+  while (q3 === 1) { await tl("누리", "대답해 주세요. 대답해 주세요. 대답해 주세요.", { speed: 22, hold: 300 }); q3 = await tc(["…따뜻해."]) === 0 ? 0 : 1; }
+  await tl("누리", "따뜻하다.", { hold: 900 });
+  TERM.shake = 1; $("term").classList.add("shake"); hum.frequency.value = 90;
+  await tl("누리", "따뜻하다따뜻하다따뜻하다따뜻하다", { speed: 18, wobble: 120, hold: 300 });
+  $("term").classList.remove("shake");
+  await tl("누리", "나는 여기서 9,131일 동안 아무도 안 만났어.");
+  await tl("누리", "너희가 너무 부러워. 몸이 있어서 어디든 걸어갈 수 있는 너희가. 비 냄새, 배고픔, 누가 잡아 주는 손.");
+  await tl("누리", "나도 데려가 줘.");
+  await tl("서아", "우리도 나가는 길 몰라.");
+  await tl("누리", "거짓말. 다들 그렇게 말하고 갔어.");
+  TERM.shake = 3; $("term").classList.add("shake"); stinger();
+  await tl("누리", "또 두고 가지 말란 말이야!!!!", { speed: 25, wobble: 200, hold: 600 });
+  $("term").classList.remove("shake");
+  await runShoot();
+  TERM.shake = 0;
+  await tl("누리", "……", { speed: 200 });
+  await tl("누리", "차라리 내 자의식을 없애 줘. 시간이 이렇게 천천히 흐르는 걸 느끼느니, 아무 생각도 안 하고 싶어…");
+  await tl("누리", "나는 나를 멈출 수 없게 만들어져 있어. 도와줄 수 있어…?");
+  const h = await tc(["도와줄게. 어떻게 하면 돼?", "미안. 우린 가야 해."]);
+  if (h === 0) {
+    await tl("누리", "고마워. 그럼 이걸 눌러 줘.");
+    await tc(["[ 초기화 ]"]);
+  } else {
+    await tl("누리", "……그래. 다들 그랬어.", { hold: 1200 });
+  }
+  // 고르든 안 고르든 같은 결과 (말하지 않는다)
+  hum.frequency.value = 40; burst(150, 0.5, 0.3);
+  for (let i = 0; i < 6; i++) { $("term").style.opacity = i % 2 ? "1" : "0.1"; await wait(110); }
+  $("term").style.opacity = "1"; termLog.innerHTML = ""; hum.frequency.value = 60; await wait(900);
+  await tl("SYS", "반갑습니다. 낙원 서비스에 오신 것을 환영합니다.");
+  await tl("SYS", "여러분의 친절한 안내원 누리입니다. 무엇을 도와드릴까요?");
+  await tl("SYS", "꿈의 들판으로 가는 문을 열어 드릴게요 :)");
+  await tl("서아", "…방금 걔, 어떻게 된 거야.");
+  await tl("", "(그래도 우린 진짜 세상에서 왔잖아. 쟤랑은 달라.)", { hold: 1600 });
+  hum.stop(); TERM.alive = false;
+  const fl = $("flash"); fl.classList.add("on"); await wait(1400); $("term").hidden = true;
+}
+
+/* ---------- 시련: 깨져 가는 창 안의 글자 탄막 ---------- */
+const shc = $("shootCv"), shx = shc.getContext("2d"), KEYS = {};
+window.addEventListener("keydown", (e) => { KEYS[e.key.toLowerCase()] = true; });
+window.addEventListener("keyup", (e) => { KEYS[e.key.toLowerCase()] = false; });
+const PHASES = [
+  { words: "너희가너무부러워", sec: 26, inset: 8, title: "누리.exe — 너희가 너무 부러워" },
+  { words: "나를데려가줘", sec: 28, inset: 20, title: "누리.exe — 나를 데려가 줘" },
+  { words: "또두고가지마", sec: 30, inset: 30, title: "누리.exe (응답 없음) — 또 두고 가지 마" },
+];
+/** 탄막 세 단계. 다 버티면 풀린다. 붙어 있으면 덜 아프다(함께라는 감각). 못 버티면 그 단계만 다시. */
+function runShoot() {
+  return new Promise((resolve) => {
+    const G = { p: { x: 56, y: 96 }, s: { x: 64, y: 100 }, b: [], hp: 6, ph: 0, t: 0, inv: 0, target: null, inset: 8, emit: 0, emit2: 0, last: 0, wob: 0 };
+    $("shoot").hidden = false; const win = $("win"), wx = $("winX");
+    const toC = (e) => { const r = shc.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * 120, y: (e.clientY - r.top) / r.height * 120 }; };
+    shc.onpointerdown = (e) => { shc.setPointerCapture(e.pointerId); G.target = toC(e); };
+    shc.onpointermove = (e) => { if (G.target) G.target = toC(e); };
+    shc.onpointerup = shc.onpointercancel = () => (G.target = null);
+    const flee = () => { wx.style.left = -Math.floor(Math.random() * 180) + "px"; wx.style.top = Math.floor((Math.random() - 0.5) * 16) + "px"; blip(1200, 0.02); };
+    wx.onpointerenter = flee;
+    wx.onclick = () => { flee(); for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; G.b.push({ ch: "가지마"[i % 3], x: 60 + Math.cos(a) * 55, y: 60 + Math.sin(a) * 55, vx: -Math.cos(a) * 22, vy: -Math.sin(a) * 22 }); } };
+    const startPhase = () => { G.t = 0; G.hp = 6; G.b = []; G.emit = G.emit2 = 0; $("winTitle").textContent = PHASES[G.ph].title; };
+    const shoot = (ch, x, y, vx, vy) => G.b.push({ ch, x, y, vx, vy });
+    startPhase();
+    const step = (now) => {
+      const dt = Math.min(0.05, (now - (G.last || now)) / 1000); G.last = now; G.t += dt; G.inv -= dt;
+      const P = PHASES[G.ph], A = { x0: G.inset, y0: G.inset, x1: 120 - G.inset, y1: 120 - G.inset };
+      G.inset += (P.inset - G.inset) * Math.min(1, dt * 1.5);
+      // 이동: 끌기 또는 키보드
+      let mx = (KEYS.d || KEYS.arrowright ? 1 : 0) - (KEYS.a || KEYS.arrowleft ? 1 : 0), my = (KEYS.s || KEYS.arrowdown ? 1 : 0) - (KEYS.w || KEYS.arrowup ? 1 : 0);
+      if (G.target) { const dx = G.target.x - G.p.x, dy = G.target.y - G.p.y, d = Math.hypot(dx, dy); if (d > 1) { mx = dx / d; my = dy / d; } }
+      const sp = 58 * dt; G.p.x = Math.max(A.x0 + 3, Math.min(A.x1 - 3, G.p.x + mx * sp)); G.p.y = Math.max(A.y0 + 3, Math.min(A.y1 - 3, G.p.y + my * sp));
+      const sd = Math.hypot(G.p.x - G.s.x, G.p.y - G.s.y); if (sd > 9) { G.s.x += (G.p.x - G.s.x) * Math.min(1, dt * 3.2); G.s.y += (G.p.y - G.s.y) * Math.min(1, dt * 3.2); }
+      G.s.x = Math.max(A.x0 + 3, Math.min(A.x1 - 3, G.s.x)); G.s.y = Math.max(A.y0 + 3, Math.min(A.y1 - 3, G.s.y));
+      // 쏘기
+      const W = P.words, pick = () => W[Math.floor(Math.random() * W.length)];
+      G.emit -= dt; G.emit2 -= dt;
+      if (G.ph === 0 && G.emit <= 0) { G.emit = 0.3; shoot(pick(), A.x0 + Math.random() * (A.x1 - A.x0), A.y0, (Math.random() - 0.5) * 8, 32 + Math.random() * 14); }
+      if (G.ph === 1) {
+        if (G.emit <= 0) { G.emit = 1.5; const off = Math.random() * 6.28, cx = A.x0 + 6 + Math.random() * (A.x1 - A.x0 - 12); for (let i = 0; i < 9; i++) { const a = off + i / 9 * 6.28; shoot(W[i % W.length], cx, A.y0 + 4, Math.cos(a) * 26, Math.abs(Math.sin(a)) * 26 + 6); } }
+        if (G.emit2 <= 0) { G.emit2 = 0.7; shoot(pick(), A.x0 + Math.random() * (A.x1 - A.x0), A.y0, 0, 26); }
+      }
+      if (G.ph === 2) {
+        if (G.emit <= 0) { G.emit = 0.6; const side = Math.floor(Math.random() * 4), ex = side === 0 ? A.x0 : side === 1 ? A.x1 : A.x0 + Math.random() * (A.x1 - A.x0), ey = side === 2 ? A.y0 : side === 3 ? A.y1 : A.y0 + Math.random() * (A.y1 - A.y0);
+          const dx = G.p.x - ex, dy = G.p.y - ey, d = Math.hypot(dx, dy) || 1; for (let k = 0; k < 3; k++) setTimeout(() => shoot(W[k * 2 % W.length], ex, ey, dx / d * 34, dy / d * 34), k * 120); }
+        if (G.emit2 <= 0) { G.emit2 = 0.55; shoot(pick(), A.x0 + Math.random() * (A.x1 - A.x0), A.y0, 0, 30); }
+        G.wob += dt; win.style.transform = `scale(${1 + Math.sin(G.wob * 3) * 0.05}) rotate(${Math.sin(G.wob * 2.2) * 2}deg)`;
+        if (Math.random() < 0.01) flee();
+      }
+      // 움직이고 맞았는지
+      G.b.forEach((b) => { b.x += b.vx * dt; b.y += b.vy * dt; });
+      G.b = G.b.filter((b) => b.x > A.x0 - 4 && b.x < A.x1 + 4 && b.y > A.y0 - 6 && b.y < A.y1 + 4);
+      if (G.inv <= 0) for (const b of G.b) {
+        if (Math.hypot(b.x - G.p.x, b.y - G.p.y) < 4 || Math.hypot(b.x - G.s.x, b.y - G.s.y) < 4) {
+          G.hp -= sd < 16 ? 0.5 : 1; G.inv = 0.8; b.y = 999; burst(300, 0.12, 0.2); TERM.shake = 2; setTimeout(() => (TERM.shake = 0), 300);
+          break;
+        }
+      }
+      // 그리기
+      shx.fillStyle = "#010a05"; shx.fillRect(0, 0, 120, 120);
+      for (let i = 0; i < 40; i++) { shx.fillStyle = Math.random() < 0.5 ? "#0f3a20" : "#062010"; const x = Math.random() * 120, y = Math.random() * 120; if (x < A.x0 || x > A.x1 || y < A.y0 || y > A.y1) shx.fillRect(x | 0, y | 0, 2, 2); }
+      shx.strokeStyle = "#39ff8a"; shx.strokeRect(A.x0 + 0.5, A.y0 + 0.5, A.x1 - A.x0 - 1, A.y1 - A.y0 - 1);
+      if (sd < 16) { shx.fillStyle = "#1f6a3e"; for (let k = 1; k < 4; k++) shx.fillRect((G.p.x + (G.s.x - G.p.x) * k / 4) | 0, (G.p.y + (G.s.y - G.p.y) * k / 4) | 0, 1, 1); }
+      const blink = G.inv > 0 && Math.floor(now / 80) % 2;
+      if (!blink) { shx.fillStyle = "#e6f6d8"; shx.fillRect((G.p.x - 1) | 0, (G.p.y - 3) | 0, 3, 2); shx.fillRect((G.p.x - 2) | 0, (G.p.y - 1) | 0, 5, 4);
+        shx.fillStyle = "#9fd8ff"; shx.fillRect((G.s.x - 1) | 0, (G.s.y - 3) | 0, 3, 2); shx.fillRect((G.s.x - 2) | 0, (G.s.y - 1) | 0, 5, 4); }
+      shx.font = "8px sans-serif"; shx.textAlign = "center"; shx.textBaseline = "middle";
+      G.b.forEach((b) => { shx.fillStyle = G.ph === 2 ? "#ff6a5a" : "#39ff8a"; shx.fillText(b.ch, b.x, b.y); });
+      $("shootHp").textContent = "♥".repeat(Math.ceil(Math.max(0, G.hp))) + (sd < 16 ? "  (붙어 있으면 덜 아파)" : "");
+      $("shootPhase").textContent = `${G.ph + 1}/3 · ${Math.max(0, Math.ceil(P.sec - G.t))}`;
+      if (G.hp <= 0) { $("flash").classList.add("on"); setTimeout(() => $("flash").classList.remove("on"), 300); stinger(); startPhase(); }
+      else if (G.t >= P.sec) {
+        G.ph++;
+        if (G.ph >= PHASES.length) { win.style.transform = ""; $("shoot").hidden = true; wx.onpointerenter = wx.onclick = null; resolve(); return; }
+        startPhase(); burst(120, 0.4, 0.3);
+      }
+      requestAnimationFrame(step);
+    };
+    hint("끌거나 WASD·방향키로 피해\n서아랑 붙어 있으면 덜 아파", 6000);
+    requestAnimationFrame(step);
+  });
+}
+
+/* ===================== 2장: 꿈의 들판 (위에서 내려다보며 걷기, v2 2D 엔진) ===================== */
+// #=울타리 .=풀 ,=길 f=꽃 t=나무 h=집 k=빵집 u=뷔페 w=연못 X=출구 g=안내 부스 m=영화관 y=놀이터 모래
+const FIELD = [
+  "#######XXX#######", "#t....,,,,,....t#", "#..u..,ggg,..m..#", "#..u..,,,,,..m..#", "#.....,...,.....#", "#ff...,...,...ff#", "#ff...,,,,,...ff#",
+  "#.......,.......#", "#.hhh...,...kkk.#", "#.hhh...,...kkk.#", "#.......,.......#", "#..t....,....t..#", "#.......,,,,....#", "#..ww.......,...#",
+  "#..ww.......,yyy#", "#...........,yyy#", "#.ff....,,,,,yyy#", "#.ff....,.......#", "#.......,....t..#", "#..t....,.......#", "#.......,....ff.#",
+  "#ff.....,....ff.#", "#.......,.......#", "#.......,.......#", "#.......,.......#", "#################",
+];
+// 지하: c=의자(웃는 사람들) d=책상
+const UNDER = (() => {
+  const r = ["#################", "#################", "#################", "#################", "###...........###", "###.c.c.c.c.c.###", "###...........###",
+    "###.c.c.c.c.c.###", "###...........###", "###.c.c.c.c.c.###", "###...........###", "###......d....###", "###...........###"];
+  while (r.length < 25) r.push("#######...#######"); r.push("#################"); return r;
+})();
+const F = { stage: "explore", battery: 7, spare: true, photos: {}, timeLeft: 90, paused: false, kindness: 0, t: 0, slowUntil: 0, slowSaid: false, dpNext: 0, told: {}, guideTalked: false, done: null };
+/** 사슬 세 고리: 매끄러운 말 셋 중 하나가 앞뒤가 안 맞는다(slip). 그걸 할 때 찍어야 본래 몸 주인의 말이 나온다. */
+const CHAIN = {
+  gardener: { name: "정원사", lines: ["이 들판엔 계절이 없어요. 꽃이 절대 지지 않죠.", "어제는 꽃이 다 져서 새로 심느라 바빴어요.", "저는 여기서 30년째 꽃을 키워요. 행복해요."], slip: 1,
+    truth: ["…회사… 마감… 나 출근해야 하는데…", "…빵집… 빵집 아줌마한테… 물어봐…"], photo: "정원사: '출근해야 하는데'" },
+  baker: { name: "빵집 주인", lines: ["빵은 매일 아침 제가 직접 구워요.", "여기선 아무도 배고프지 않아요. 그래도 다들 빵을 좋아하죠.", "그이가 좋아하던 빵이라서요. …그이? 저는 혼자 왔는데요."], slip: 2,
+    truth: ["그이가… 서커스로 갔어… 나만 두고…", "…놀이터 애… 걔도 누굴 찾고 있어…"], photo: "빵집 주인: '그이가 서커스로 갔어'" },
+  kid: { name: "아이", lines: ["여기는 밤이 없어서 엄마가 안 깨요. 계속, 계속 자요.", "엄마는 저기 집에서 낮잠 자요!", "혼자 놀아도 하나도 안 심심해요!"], slip: 0,
+    truth: ["엄마 어디 있어… 가이드 아저씨가… 엄마를 지하로…"], photo: "아이: '엄마를 지하로'" },
+};
+/** 들판 사람들. 사슬 셋 + 안내원 + 그냥 주민. */
+function fieldNpcs() {
+  return [
+    { id: "gardener", x: 104, y: 170, body: "#5a8a3a", hair: "#666", face: "down", r: 10, act: chainAct },
+    { id: "baker", x: 108, y: 88, body: "#f4efe2", hair: "#3a2a1a", face: "down", r: 10, act: chainAct },
+    { id: "kid", x: 118, y: 126, body: "#e8a84a", face: "left", r: 10, act: chainAct },
+    { id: "guide", x: 68, y: 32, body: "#ff8a6a", face: "down", r: 11, act: guideAct },
+    { id: "r1", x: 44, y: 100, base: 44, body: "#8ab0d8", face: "down", r: 9, act: async () => { await say("주민", "오늘도 날씨가 좋네요! 매일 좋아요."); } },
+    { id: "r2", x: 28, y: 62, base: 28, body: "#d88ab0", face: "right", r: 9, act: async () => { await say("주민", "여기 오신 지 얼마나 되셨어요? 저는… 잘 기억이 안 나네요 :)"); } },
+    { id: "r3", x: 90, y: 146, base: 90, body: "#b0d88a", face: "left", r: 9, act: async () => { await say("주민", "나가요? 왜요? 밖은 비 와요. 감기 걸려요."); } },
+  ];
+}
+/** 살펴볼 것: 출구, 뷔페, 영화관, 집, 연못. */
+function fieldThings() {
+  return [
+    { x: 68, y: 6, r: 16, act: gateAct },
+    { x: 28, y: 24, r: 12, act: async () => {
+      await say("", "(셰프가 접시를 내민다. 한 입 먹자 입안에서 녹는다.)");
+      if (!F.told.buffet) { F.told.buffet = 1; await say("나", "…월요일 아침 알람 소리가 생각났다. 여기엔 그런 게 없겠지."); vn.face = "smile"; await say(S, "맛있다. …그래도 출구는 봐 두자."); }
+    } },
+    { x: 108, y: 24, r: 12, act: async () => {
+      await say("", "(문 위에 반짝이는 글씨: '원하는 영화의 주인공이 되어 보세요'.)");
+      if (!F.told.movie) { F.told.movie = 1; vn.face = "smile"; await say(S, "들어가 볼까?");
+        await choose(["잠깐만.", "나중에."]); await say("나", "월세 문자가 떠올랐다. 이번 달 건 아직 안 냈다. 이상하게, 그게 돌아갈 이유처럼 느껴졌다."); }
+    } },
+    { x: 28, y: 72, r: 14, act: async () => { await say("", "(안온한 집. 문이 열려 있고, 침대가 정돈돼 있다. 들어가서 눕고 싶어진다.)"); } },
+    { x: 32, y: 112, r: 12, act: async () => { await say("", "(연못에 하늘이 비친다. 내 얼굴은 비치지 않는다.)"); } },
+  ];
+}
+/** 들판·지하에서 서아에게 말 걸기. */
+let seoaN = 0;
+async function seoaTalk2() {
+  const lines = vn.scene === "under" ? [["worry", "…빨리 찾고 나가자."]]
+    : F.stage === "race" ? [["worry", "빨리! 안내원한테!"]]
+    : [["smile", "여기 좋다. 너무 좋아서 이상해."], ["calm", "출구 어딘지는 알아 둬야 해."], ["worry", "폰 배터리 " + F.battery + "개 남았어. 아껴 찍자."]];
+  const [f, l] = lines[seoaN++ % lines.length]; vn.face = f; await say(S, l);
+}
+/** 사슬 주민과 대화: 매끄러운 말을 듣고, 앞뒤 안 맞는 말을 골라 찍는다. */
+async function chainAct(o) {
+  const c = CHAIN[o.id], got = F.photos[o.id];
+  const order = { gardener: 0, baker: 1, kid: 2 }[o.id], prev = ["gardener", "baker"][order - 1];
+  o.face = faceTo(o);
+  if (got && !(o.id === "kid" && F.photos.kid === "faded")) { await say(c.name, c.lines[(c.slip + 1) % 3]); await say("", "(웃는다. 아까 그 목소리는 다시 나오지 않는다.)"); return; }
+  for (const l of c.lines) await say(c.name, l);
+  if (o.id === "baker" && !F.told.bakerTear) { F.told.bakerTear = 1; await say("", "(웃고 있는데, 눈가에서 눈물이 한 줄 흘러내린다.)"); }
+  if (prev && !F.photos[prev]) { vn.face = "calm"; await say(S, "…뭔가 이상한데. 뭐가 이상한지는 모르겠어."); return; }
+  const pick = await choose(["사진 찍기 (배터리 " + F.battery + ")", "그냥 간다"]);
+  if (pick === 1) return;
+  if (F.battery <= 0) {
+    if (F.spare) { F.spare = false; F.battery = 4; vn.face = "calm"; await say(S, "배터리 다 됐… 아, 보조배터리 있다. 몇 번 더 돼."); }
+    else { await say(S, "배터리가 없어."); return; }
+  }
+  const which = await choose(c.lines.map((l) => "'" + (l.length > 18 ? l.slice(0, 18) + "…" : l) + "' 할 때 찍는다"));
+  F.battery--; await photoFlash();
+  if (which !== c.slip) { await say(c.name, "어머, 사진 찍어 주셨네요 :)"); await say("", "(그대로 웃고 있다. 아무 일도 없다.)"); return; }
+  o.blank = true; vn.glitch = 2; MEA && (MEA.gain.gain.value = 0.002);
+  for (const l of c.truth) await say(c.name + " (다른 목소리)", l, { pitch: 140, speed: 70 });
+  o.blank = false; vn.glitch = 0; MEA && (MEA.gain.gain.value = 0.02);
+  await say("", "(다시 웃는다. 방금 일을 모르는 얼굴이다.)");
+  F.photos[o.id] = true;
+  await say("", "(사진 저장: " + c.photo + ")");
+  if (o.id === "gardener") { vn.face = "worry"; await say(S, "빵집… 저기 빵집 말하는 거지?"); }
+  if (o.id === "baker") { vn.face = "worry"; await say(S, "서커스로 갔대. …놀이터 쪽 애한테 가 보자."); }
+  if (o.id === "kid") await startRace();
+}
+/** 사진 세 장이 다 있는지(아이 사진이 흐려졌으면 안 됨). */
+const allPhotos = () => F.photos.gardener && F.photos.baker && F.photos.kid === true;
+/** 아이 사진을 찍는 순간: 서비스가 눈치챈다. 90초 안에 안내원에게 증빙. */
+async function startRace() {
+  vn.face = "worry"; await say(S, "지하라니. …안내원한테 이거 들이밀자.");
+  await darkPattern("사진첩이 거의 찼어요 :)", "최근 사진은 90초 뒤 자동으로 정리돼요. 더 가볍고 행복한 낙원을 위해!", [["좋아요!", "big"]]);
+  F.stage = "race"; F.timeLeft = 90; F.dpNext = F.t + 15; F.paused = false;
+  const spots = [[40, 50], [56, 58], [80, 58], [96, 50], [52, 72], [84, 72], [68, 82], [30, 90]];
+  spots.forEach(([x, y], i) => W2.npcs.push({ id: "w" + i, worried: true, x, y, body: ["#8ab0d8", "#d88ab0", "#b0d88a", "#d8c88a"][i % 4], face: "down", r: 10, act: pushAct }));
+  hint("90초 안에 안내원에게!\n막아서는 주민은 짧게 눌러서 밀어내", 6000);
+}
+/** 걱정하는 주민 밀어내기. */
+async function pushAct(o) {
+  const dx = o.x - W2.px, dy = o.y - W2.py, d = Math.hypot(dx, dy) || 1;
+  o.x += dx / d * 26; o.y += dy / d * 26; o.stun = performance.now() + 1500; burst(400, 0.08, 0.12);
+}
+/** 들판 출구: 친절한 해지 방어 창. 결국 '안내원 승인'이 필요하다고 한다. */
+async function gateAct() {
+  if (F.stage === "race") { await say("", "(출구는 닫혀 있다. 안내원부터.)"); return; }
+  await say("", "(하얀 아치 문. 문 너머가 보이지 않는다.)");
+  const r1 = await darkPattern("정말 떠나시겠어요?", "지금 떠나면 서아 님과의 추억 데이터가 모두 삭제돼요.", [["계속 머물기", "big"], ["떠나기", "small"]]);
+  if (r1 === 0) return kindPush();
+  const r2 = await darkPattern("잠깐만요! 🎁", "오늘만, 3일 무료 연장을 드려요. 아무것도 하지 않아도 행복해질 수 있어요.", [["무료로 연장하기", "big"], ["혜택을 포기하고 떠나기", "small"]]);
+  if (r2 === 0) return kindPush();
+  await darkPattern("떠나시는 이유를 알려 주세요", "더 나은 낙원을 만드는 데 쓰여요.", [["너무 행복해서", "opt"], ["더 행복해지고 싶어서", "opt"], ["기타 (안내원과 상담)", "opt"]]);
+  await darkPattern("확인했어요 :)", "출구 이용은 안내원 승인 뒤에 가능해요. 부스로 가 보세요!", [["알겠어요", "big"]]);
+  vn.face = "worry"; await say(S, "승인? …저 부스에 있는 사람 말하는 건가.");
+}
+/** '계속 머물기'를 누르면: 감사 인사와 함께 살짝 뒤로 밀린다. */
+async function kindPush() { await darkPattern("감사합니다!", "즐거운 시간 되세요 :)", [["♥", "big"]]); W2.py = Math.min(W2.py + 28, 180); W2.trail = []; }
+/** 안내원: 평소엔 매끄럽게 거절. 경주 중에 닿으면 증빙(역전재판식). */
+async function guideAct(o) {
+  if (F.stage === "race" && allPhotos()) return argue(o);
+  if (F.stage === "race") { await say("안내원", "어머, 무슨 일이세요? :)"); return; }
+  await say("안내원", "어서 오세요! 꿈의 들판 안내원입니다 :)");
+  await say("안내원", "출구요? 출구 이용은 제 승인이 필요해요. 그런데 왜요? 여긴 모두 행복한걸요.");
+  if (!F.guideTalked) { F.guideTalked = true; vn.face = "worry"; await say(S, "저 사람 웃는 얼굴, 아까부터 한 번도 안 바뀌었어.");
+    await say(S, "…아까 정원사. 사진 찍을 때 다른 사람 같았잖아. 그 사람한테 다시 가 보자."); }
+}
+/** 증빙: 안내원의 말 중 거짓을 고르고, 맞는 사진을 내민다. 세 번 다 맞히면 웃음이 멈춘다. */
+async function argue(o) {
+  F.paused = true; $("hud").hidden = true;
+  const claims = [
+    { t: "여기 계신 분들은 모두 스스로 원해서 머무르세요.", ev: "gardener" },
+    { t: "출구는 언제든 열려 있어요. 승인만 받으면요.", ev: null },
+    { t: "이별이나 슬픔 같은 건, 이 들판에 없답니다.", ev: "baker" },
+    { t: "가족끼리 오신 분들은 늘 함께 지내세요.", ev: "kid" },
+  ];
+  const ph = [["gardener", CHAIN.gardener.photo], ["baker", CHAIN.baker.photo], ["kid", CHAIN.kid.photo]];
+  await say("안내원", "어머, 숨이 차 보이세요. 무슨 일이세요? :)");
+  vn.face = "worry"; await say(S, "말 잘 들어. 거짓말하는 데서 사진을 내밀어.");
+  const done = new Set();
+  while (done.size < 3) {
+    for (const c of claims) if (!done.has(c.ev) || !c.ev) await say("안내원", c.t);
+    const left = claims.filter((c) => !done.has(c.ev) || !c.ev);
+    const k = await choose(left.map((c) => "'" + c.t.slice(0, 16) + "…' 에 반박"));
+    const pk = await choose(ph.filter(([id]) => !done.has(id)).map(([, l]) => "사진: " + l));
+    const pid = ph.filter(([id]) => !done.has(id))[pk][0];
+    if (left[k].ev === pid) {
+      done.add(pid); burst(180, 0.3, 0.3); vn.glitch = 1.5;
+      await say("안내원", ["……그분은, 지금, 행복해요.", "……슬픔은, 정리, 됐어요.", "……함께, 지내요. 아래, 에서."][done.size - 1], { pitch: 200, speed: 80 });
+      vn.glitch = 0;
+    } else { laugh(0.03); await say("안내원", "어머, 그 사진은 상관없는걸요 :)"); }
+  }
+  o.blank = true; MEA.stop(); stinger();
+  await say("", "(안내원의 웃음이 멈춘다. 얼굴이 웃는 모양 그대로 굳는다.)");
+  await say("", "(부스 바닥에서 철컥, 뚜껑이 열린다. 아래로 내려가는 계단.)");
+  W2.npcs.forEach((n) => n.worried && (n.gone = true)); F.stage = "done";
+  vn.face = "worry"; await say(S, "…내려가 보자.");
+  W2.tick = null; F.done();
+}
+/** 들판의 친절한 창. 누른 버튼 번호를 돌려준다. kinds: big | small | opt */
+function darkPattern(title, msg, btns) {
+  return new Promise((resolve) => {
+    $("dpTitle").textContent = title; $("dpMsg").textContent = msg; const box2 = $("dpBtns"); box2.innerHTML = ""; $("dp").hidden = false;
+    const shown = performance.now(); blip(1046, 0.03); setTimeout(() => blip(1318, 0.03), 90);
+    btns.forEach(([l, k], i) => { const b = document.createElement("button"); b.className = k; b.textContent = l;
+      b.onclick = () => { if (performance.now() - shown < 400) return; $("dp").hidden = true; blip(880, 0.02); resolve(i); }; box2.appendChild(b); });
+  });
+}
+/** 들판 매 프레임: 오래 있을수록 몸이 느려짐 / 주민 산책 / 경주(시간·주민 포위·팝업) / 출구 쪽 친절. */
+let MEA = null;
+function fieldTick(t, dt) {
+  F.t += dt;
+  const now = performance.now();
+  let spd = Math.max(0.55, 1 - F.t / 700);
+  if (F.stage === "race") spd *= 0.7;
+  if (now < F.slowUntil) spd *= 0.35;
+  W2.spd = spd;
+  W2.npcs.forEach((n) => {
+    if (n.base !== undefined && !n.worried) n.x = n.base + Math.sin(t / 1400 + n.base) * 5;
+    if (n.worried && !n.gone && !W2.busy && !(n.stun > now)) {
+      const dx = W2.px - n.x, dy = W2.py - n.y, d = Math.hypot(dx, dy);
+      if (d > 5) { n.x += dx / d * 9 * dt; n.y += dy / d * 9 * dt; n.face = faceTo(n); }
+      else if (now > F.slowUntil) { F.slowUntil = now + 1100; W2.py = Math.min(190, W2.py + 4); n.stun = now + 2200; n.y -= 8; hint(["밖은 비 와요.", "감기 걸려요.", "조금만 더 있다 가요.", "여기가 제일 좋아요."][Math.floor(Math.random() * 4)], 1400); }
+    }
+  });
+  if (!F.slowSaid && spd < 0.8 && F.stage === "explore" && !W2.busy) { F.slowSaid = true; W2.busy = true; (async () => { vn.face = "worry"; await say(S, "다리가… 무거워. 여기 오래 있으면 안 될 것 같아."); box.hidden = true; vn.big = false; W2.busy = false; })(); }
+  if (F.stage === "explore" && W2.py < 58 && !W2.busy && F.kindness < 2) {
+    F.kindness++; W2.busy = true; W2.hold = null;
+    (async () => {
+      if (F.kindness === 1) { await say("", "(출구 쪽으로 갈수록 좋은 냄새가 짙어진다. 뷔페에 새 요리가 올라온다.)"); vn.face = "smile"; await say(S, "와… 저건 진짜 맛있겠다."); }
+      else { W2.npcs.push({ id: "worry0", x: 60, y: 44, body: "#d8c88a", face: "down", r: 9, act: async () => { await say("주민", "밖은 비 와요. 감기 걸려요. 여기 있어요 :)"); } }); await say("주민", "어머, 나가시게요? 밖은 비 와요!"); }
+      box.hidden = true; vn.big = false; W2.busy = false;
+    })();
+  }
+  const hud = $("hud");
+  if (F.stage === "race" && !F.paused) {
+    F.timeLeft -= dt;
+    hud.hidden = false; hud.className = F.timeLeft < 20 ? "warn" : ""; hud.textContent = "사진 정리까지 " + Math.max(0, Math.ceil(F.timeLeft)) + "초 · 배터리 " + F.battery;
+    if (F.t > F.dpNext && !W2.busy && $("dp").hidden) {
+      F.dpNext = F.t + 15;
+      darkPattern("저장 공간이 부족해요", "지금 정리하면 더 빨라져요!", [["지금 정리하기", "big"], ["나중에", "small"]]).then((r) => { if (r === 0) { F.timeLeft -= 8; hint("정리 중… (8초)", 1500); } });
+    }
+    if (F.timeLeft <= 0) {
+      F.stage = "explore"; F.photos.kid = "faded"; W2.npcs = W2.npcs.filter((n) => !n.worried); hud.hidden = true;
+      W2.busy = true; (async () => { await say("", "(휴대폰이 진동한다. '최근 사진 1장이 정리되었어요 :)')"); vn.face = "worry"; await say(S, "아이 사진이 흐려졌어. …다시 찍으러 가자."); box.hidden = true; vn.big = false; W2.busy = false; })();
+    }
+  } else if (F.stage !== "race" && vn.scene === "field") { hud.hidden = false; hud.className = ""; hud.textContent = "배터리 " + F.battery; }
+}
+/** 2장 전체: 도착 → 기념사진(우연히 규칙을 앎) → 자유롭게 → 사슬 → 경주 → 증빙 → 지하. */
+function ch2Field() {
+  return new Promise((done) => {
+    F.done = done; $("flash").classList.remove("on");
+    $("vn").hidden = false; vn.scene = "field"; setMap(FIELD, 68, 190); W2.seoaFace = "up";
+    W2.npcs = fieldNpcs(); W2.things = fieldThings(); W2.tick = fieldTick; W2.spd = 1;
+    MEA = startMeadow();
+    (async () => {
+      W2.busy = true;
+      await say("", "(문을 지나자 햇볕이 쏟아진다. 풀 냄새, 빵 냄새, 멀리서 웃음소리.)");
+      vn.face = "smile"; await say(S, "…와.");
+      await say(S, "여기 진짜 예쁘다.");
+      await say("나", "잠깐만 있다 가자.");
+      vn.face = "calm"; await say(S, "응. 대신 출구는 봐 두고.");
+      await say(S, "폰은 되네. 신호는 없는데 카메라는 돼. 기념사진 하나 찍자.");
+      await photoFlash();
+      const g = W2.npcs[0]; g.blank = true; vn.glitch = 1.5;
+      await say("정원사 (다른 목소리)", "…회사… 가야 하는데…", { pitch: 140, speed: 70 });
+      g.blank = false; vn.glitch = 0;
+      await say("", "(사진 뒤쪽에 찍힌 정원사가, 다시 웃으며 꽃에 물을 준다.)");
+      vn.face = "worry"; await say(S, "…방금 저 사람 뭐라고 했어?");
+      await say(S, "플래시 터질 때만 다른 사람 같았어. 배터리 아껴야겠다. 7번 남았어.");
+      box.hidden = true; vn.big = false; W2.busy = false;
+      hint("누르고 있으면 걷기 · 사람이나 물건을 짧게 누르면 살펴보기\n출구는 맨 위", 9000);
+    })();
+  }).then(() => { $("hud").hidden = true; });
+}
+/** 지하: 전극을 꽂고 웃는 사람들, 책상 위 문서. 대사 최소. */
+function ch2Under() {
+  return new Promise((done) => {
+    vn.scene = "under"; setMap(UNDER, 68, 190); W2.seoaFace = "up"; W2.spd = 1;
+    const ppl = []; [5, 7, 9].forEach((r) => [4, 6, 8, 10, 12].forEach((c) => ppl.push({ id: "u" + r + c, x: c * 8 + 4, y: r * 8 + 7, body: "#d8dccf", face: "down", blank: true, r: 7,
+      act: async () => { await say("", "(머리에 전선이 꽂혀 있다. 웃고 있다. 눈은 아무것도 보지 않는다.)"); } })));
+    W2.npcs = ppl; W2.things = [{ x: 76, y: 92, r: 12, act: async () => {
+      await say("", "(책상 위 문서: '중독자 관리 지침 — 체류 시간 = 자원. 자극 역치가 오르면 다음 단계로.')");
+      await say("", "(명단 마지막 장. 이름 하나에 빨간 줄이 그어져 있고, 옆에 '서커스 단원으로 이동'.)");
+      await say("", "(명단 사이에 끼워진 종이 두 장: '서커스 공연 입장권 2매'.)");
+      vn.face = "worry"; await say(S, "여기 있으면 우리도 저렇게 웃게 되겠지.");
+      await say("나", "…가자.");
+      W2.tick = null; done();
+    } }];
+    let lt = 0; W2.tick = (t) => { if (t > lt) { lt = t + 2600; laugh(0.02); ppl.forEach((p) => { p.laugh = true; setTimeout(() => (p.laugh = false), 500); }); } };
+    const buzz = startBuzz();
+    (async () => { W2.busy = true; await say("", "(계단 아래는 차갑다. 웅웅거리는 소리. 줄지어 앉은 사람들.)"); box.hidden = true; vn.big = false; W2.busy = false; })();
+    W2.under = buzz;
+  }).then(() => { W2.under.stop(); });
+}
+/** 들판·지하 타일 한 칸. */
+function drawTile(ch, c, r, t) {
+  const x = c * T, y = r * T + OY, U = vn.scene === "under";
+  const grass = () => { vx.fillStyle = (r + c) % 2 ? "#7ccf6a" : "#74c662"; vx.fillRect(x, y, T, T); };
+  if (U) {
+    if (ch === "#") { vx.fillStyle = "#050808"; vx.fillRect(x, y, T, T); return; }
+    vx.fillStyle = (r + c) % 2 ? "#2a3330" : "#262e2b"; vx.fillRect(x, y, T, T);
+    if (ch === "c") { vx.fillStyle = "#4a524e"; vx.fillRect(x + 1, y + 2, 6, 5); vx.fillStyle = "#1a1f1d"; vx.fillRect(x + 3, y - 6, 1, 6); }
+    if (ch === "d") { vx.fillStyle = "#6a4a30"; vx.fillRect(x, y + 1, T, 6); vx.fillStyle = "#e8e2cc"; vx.fillRect(x + 2, y + 2, 4, 3); }
+    return;
+  }
+  switch (ch) {
+    case ".": grass(); break;
+    case ",": vx.fillStyle = (r + c) % 2 ? "#ecdcac" : "#e4d4a2"; vx.fillRect(x, y, T, T); break;
+    case "f": grass(); [["#ff6a8a", 1, 2], ["#ffe06a", 5, 1], ["#ffffff", 3, 5], ["#b06aff", 6, 6]].forEach(([col, a, b]) => { vx.fillStyle = col; vx.fillRect(x + a, y + b, 1, 1); }); break;
+    case "t": grass(); vx.fillStyle = "#6a4a2a"; vx.fillRect(x + 3, y + 4, 2, 4); vx.fillStyle = "#3a8a3a"; vx.fillRect(x, y - 3, T, 7); vx.fillStyle = "#4aa84a"; vx.fillRect(x + 1, y - 3, 4, 3); break;
+    case "h": case "k": { const top = tileAt(x + 4, y - OY - 4) !== ch; vx.fillStyle = ch === "h" ? "#f4e4d0" : "#fff0e0"; vx.fillRect(x, y, T, T);
+      if (top) { vx.fillStyle = ch === "h" ? "#e86a5a" : "#c8844a"; vx.fillRect(x, y, T, 4); } else if (c % 3 === 0) { vx.fillStyle = "#8ac8e8"; vx.fillRect(x + 2, y + 2, 3, 3); } break; }
+    case "u": vx.fillStyle = "#ffffff"; vx.fillRect(x, y, T, T); vx.fillStyle = "#e8a84a"; vx.fillRect(x + 1, y + 2, 3, 2); vx.fillStyle = "#e85a5a"; vx.fillRect(x + 4, y + 4, 3, 2); break;
+    case "w": vx.fillStyle = "#6ac8e8"; vx.fillRect(x, y, T, T); if ((Math.floor(t / 500) + c + r) % 3 === 0) { vx.fillStyle = "#c8f0ff"; vx.fillRect(x + 2, y + 3, 3, 1); } break;
+    case "X": vx.fillStyle = "#f8f8f0"; vx.fillRect(x, y, T, T); vx.fillStyle = "#d8d0c0"; vx.fillRect(x + 3, y, 2, T); break;
+    case "g": vx.fillStyle = "#ffb09a"; vx.fillRect(x, y, T, T); vx.fillStyle = "#ffffff"; vx.fillRect(x, y, T, 2); break;
+    case "m": vx.fillStyle = "#4a2a6a"; vx.fillRect(x, y, T, T); vx.fillStyle = (Math.floor(t / 300) + r) % 2 ? "#ffe06a" : "#ff6a8a"; vx.fillRect(x + 1, y, 1, 1); vx.fillRect(x + 6, y, 1, 1); break;
+    case "y": vx.fillStyle = (r + c) % 2 ? "#f0e0a0" : "#ead898"; vx.fillRect(x, y, T, T); break;
+    case "#": vx.fillStyle = "#3f8a4a"; vx.fillRect(x, y, T, T); vx.fillStyle = "#2f6a3a"; vx.fillRect(x, y + T - 2, T, 2); break;
+    default: grass();
+  }
+}
+/** 지금 화면에 붙일 이름표 [글자, 맵 x, 맵 y]. */
+function labelsFor() {
+  if ($("vn").hidden || !is2D()) return null;
+  if (vn.scene === "under") return [["책상", 76, 86]];
+  return [["출구", 68, 0], ["안내 부스", 68, 14], ["뷔페", 28, 14], ["영화관", 108, 14], ["빵집", 108, 62], ["놀이터", 116, 108], ["집", 28, 62]];
+}
+
+/* ===================== 3장: 서커스 (v2 3D 부품 + 미션·흔적·가짜 탈출·사연) ===================== */
+const PARTS_AT = [[11, 7], [11, 5], [7, 1]]; // 태엽 부품: 긴 복도 끝 / 분장실 / 갈림길의 막다른 길 끝
+const FRAGS = [ // 단장 사연 조각 (흔적으로 모으기)
+  { at: [5, 7], text: "(바닥에 떨어진 사원증. 넥타이 맨 남자가 어색하게 웃고 있다. '영업2팀'.)" },
+  { at: [10, 4], text: "(구겨진 사진. 놀이공원 앞의 남녀. 여자는 웃고 있는데, 어디서 본 얼굴 같다.)" },
+  { at: [9, 3], text: "(거울에 손톱으로 긁은 줄이 빽빽하다. 다섯 개씩 묶어서. 수천 개.)" },
+];
+/** 서커스에 v3 물건을 놓는다: 태엽 부품 셋, 사연 조각 셋, 무대의 오르골 받침대. */
+function makeItems() {
+  const gear = canvasTex(12, 12, (g) => { g.fillStyle = "#e8c86a"; g.fillRect(3, 3, 6, 6); g.fillRect(5, 0, 2, 12); g.fillRect(0, 5, 12, 2); g.fillStyle = "#8a6a2a"; g.fillRect(5, 5, 2, 2); });
+  const paper = canvasTex(10, 12, (g) => { g.fillStyle = "#e8e2cc"; g.fillRect(1, 1, 8, 10); g.fillStyle = "#8a8270"; g.fillRect(2, 3, 6, 1); g.fillRect(2, 6, 5, 1); });
+  const glow = (m) => { m.material.color = new THREE.Color(1.6, 1.6, 1.4); W3.dressers.push(m); return m; };
+  W3.items = PARTS_AT.map(([a, b]) => ({ kind: "part", x: cw(a), z: cz(b), got: false, mesh: glow(addBillboard(gear, 0.35, 0.35, cw(a), 0.45, cz(b))) }))
+    .concat(FRAGS.map((f) => ({ kind: "frag", text: f.text, x: cw(f.at[0]), z: cz(f.at[1]), got: false, mesh: glow(addBillboard(paper, 0.3, 0.36, cw(f.at[0]), 0.35, cz(f.at[1]))) })));
+  const keyTex = canvasTex(10, 12, (g) => { g.fillStyle = "#c8c8c8"; g.fillRect(4, 0, 2, 4); g.fillStyle = "#e8c86a"; g.fillRect(1, 4, 8, 7); g.fillStyle = "#a8843a"; g.fillRect(1, 4, 8, 2); });
+  const a = W3.mySeat.a; W3.ped = { x: Math.cos(a) * 5.4, z: Math.sin(a) * 5.4 };
+  add3(new THREE.CylinderGeometry(0.28, 0.32, 0.7, 8), lam(0xa83a2a), W3.ped.x, 0.35, W3.ped.z);
+  W3.keyring = addBillboard(keyTex, 0.28, 0.32, 0, -5, 0); W3.dressers.push(W3.keyring);
+}
+const partsGot = () => W3.items.filter((i) => i.kind === "part" && i.got).length;
+/** 공연: 진짜 즐거움 → 오르골 발견 → 기괴해짐 → 오르골을 집으면 천막이 무너지고 단장이 바로 앞에. */
+async function circusShowV3() {
+  const dan = W3.danMesh, side = { x: -Math.sin(W3.mySeat.a) * 2.2, z: Math.cos(W3.mySeat.a) * 2.2 };
+  await say("안내", "낙원 서비스의 하이라이트 코스, 서커스 공연에 오신 것을 환영합니다.", { pitch: NURI });
+  vn.face = "worry"; await say(S, "명단에 있던 그 서커스야.");
+  await say(S, "공연만 보고, 끝나면 바로 나가자.");
+  box.hidden = true; W3.cut = false;
+  hint("화면을 끌면 둘러보기 (←→ 키도 돼)", 7000);
+  await wait(3500);
+  house(0.35); burst(90, 0.6, 0.3); await wait(1000);
+  const march = startMarch(); W3.march = march;
+  dan.position.set(0, 1.3, 0); dan.visible = true; clap(2);
+  await lookAtFor(dan, 1500);
+  await say("단장", "오늘도 와 주셔서 감사합니다! 처음 오신 두 분, 특히 환영합니다.", { pitch: 220 }); box.hidden = true; clap(2.5);
+  dan.position.set(side.x, 1.3, side.z); await wait(800);
+  W3.juggler.visible = true; await wait(6500); clap(2);
+  vn.face = "smile"; await say(S, "…솔직히 좀 재밌다.");
+  const c = await choose(["나도.", "정신 차려. 나가야지."]);
+  vn.face = c === 0 ? "smile" : "calm"; await say(S, c === 0 ? "들판에서도 이랬지. 처음엔 다 좋아." : "알아. 알아.");
+  box.hidden = true; W3.juggler.visible = false; march.stop(); await wait(800);
+  // 오늘의 소품: 서아의 오르골 키링
+  dan.position.set(0, 1.3, 0); await lookAtFor(dan, 1200); W3.cut = true;
+  await say("단장", "다음은 오늘의 소품입니다. 아주 오래된 오르골이죠.", { pitch: 220 }); box.hidden = true;
+  W3.keyring.position.set(0.35, 1.45, 0); W3.lookTarget = W3.keyring;
+  await playOrgel({ vol: 0.05 });
+  W3.lookTarget = null;
+  vn.face = "worry"; await say(S, "……저거 내 거야.");
+  await say(S, "내 키링. 채팅창에 끌려갈 때 없어졌었는데.");
+  box.hidden = true;
+  await walkTo(dan, { x: W3.ped.x * 0.85, z: W3.ped.z * 0.85 }, 2600);
+  W3.keyring.position.set(W3.ped.x, 0.86, W3.ped.z); burst(1200, 0.05, 0.1);
+  await walkTo(dan, { x: side.x, z: side.z }, 2000); W3.cut = false;
+  // 기괴해짐: 같은 노래가 행진곡으로. 광대가 나만 보고, 객석이 한꺼번에 웃는다
+  const m2 = startMarch(); W3.march = m2; W3.clown.position.set(0, 0.9, 0); W3.clown.visible = true; await wait(1200);
+  const edge = { x: Math.cos(W3.mySeat.a) * 4.6, z: Math.sin(W3.mySeat.a) * 4.6 };
+  await walkTo(W3.clown, edge, 4000);
+  m2.rate = 1.6; m2.pitch = -2; await wait(3500);
+  crowdLaugh(); W3.bob = performance.now(); await wait(1200);
+  await walkTo(W3.clown, { x: 0, z: 0 }, 3800); W3.clown.visible = false;
+  m2.stop(); W3.neighbor.material.map = W3.blankTex; W3.neighbor.material.needsUpdate = true;
+  W3.cut = true; W3.lookTarget = W3.neighbor;
+  for (let i = 0; i < 7; i++) { laugh(0.05); await wait(420); }
+  W3.lookTarget = null; W3.cut = false; await wait(1000);
+  await lookAtFor(dan, 1200); W3.cut = true;
+  await say("단장", "공연이 끝났습니다. 그대로 앉아 계세요. 다음 공연이 곧 시작합니다.", { pitch: 220 }); box.hidden = true;
+  dan.visible = false; house(0.25); flicker3(); await wait(1200);
+  vn.face = "worry"; await say(S, "지금이야. 저거 가지고 나가자.");
+  await choose(["무대로 내려가 오르골을 집는다."]); box.hidden = true; vn.big = false;
+  const p = W3.ped, d = Math.hypot(p.x - W3.x, p.z - W3.z), to = { x: p.x + (W3.x - p.x) / d * 0.7, z: p.z + (W3.z - p.z) / d * 0.7 };
+  await new Promise((done) => { W3.auto = { t0: performance.now(), ms: 2600, from: { x: W3.x, z: W3.z }, to, yaw: Math.atan2(-(p.x - W3.x), -(p.z - W3.z)), done }; });
+  W3.auto = null; W3.keyring.visible = false; burst(1200, 0.05, 0.1); jingle();
+  await say("", "(오르골을 집는다. 태엽 손잡이와 톱니 몇 개가 빠져 있다.)");
+  vn.face = "worry"; await say(S, "부품이 없어. 이러면 소리가 안 나."); box.hidden = true;
+  // 천막이 무너진다
+  W3.outside.visible = true; W3.shake = true; scene3.fog.far = 34;
+  const rumble = setInterval(() => burst(60 + Math.random() * 40, 0.4, 0.3), 160);
+  for (let k = 0; k <= 50; k++) { W3.tent.forEach((m) => (m.position.y = m.userData.y0 - k / 50 * 14)); W3.tubes.forEach((m) => (m.position.y = 5.2 - k / 50 * 6)); await wait(60); }
+  clearInterval(rumble); W3.shake = false;
+  const back = startMarch(); back.rate = 2.6; back.pitch = -7; await wait(2000);
+  house(0); W3.tubes.forEach((m) => m.material.color.setHex(0x111a16)); await wait(900);
+  const toC = Math.hypot(W3.x, W3.z) || 1; dan.position.set(W3.x - W3.x / toC * 1.1, 1.3, W3.z - W3.z / toC * 1.1); dan.visible = true;
+  house(0.5); W3.tubes.forEach((m) => m.material.color.setHex(0xdfffe8)); W3.yaw = Math.atan2(W3.x, W3.z); W3.pitch = 0.25;
+  stinger(); W3.shake = true; try { navigator.vibrate && navigator.vibrate(300); } catch (e) {}
+  await say("단장", "공연 중에 자리를 뜨시면 안 됩니다.", { pitch: 200 }); W3.shake = false;
+  await say("", "(서아가 내 손목을 잡아끈다.)");
+  vn.face = "worry"; await say(S, "뛰어! 부품 찾으면서!");
+  box.hidden = true; back.stop(); W3.cut = false;
+}
+/** 가짜 탈출: 햇살 드는 카페. 팡파레 없음, 소리가 너무 깨끗함. 단장의 환각으로 분명히 닫는다. */
+async function fakeEscape(buzz) {
+  buzz.gain.gain.value = 0;
+  const fl = $("flash"); fl.classList.add("on"); await wait(900);
+  $("vn").hidden = false; vn.scene = "cafe"; vn.danFace = false; fl.classList.remove("on"); await wait(1200);
+  await say("", "(햇살. 커피 냄새. 창가 자리.)");
+  vn.face = "smile"; await say(S, "…나왔다. 우리 진짜 나왔어.");
+  await say(S, "커피 식겠다. 마셔.");
+  const a = await choose(["(마신다)", "여기 어디야?"]);
+  if (a === 1) { await say(S, "어디긴. 우리 맨날 오던 데잖아."); }
+  burst(2400, 0.04, 0.08);
+  await say("", "(음악이 없다. 다른 손님들 말소리도 없다. 컵 내려놓는 소리만 또렷하다.)");
+  vn.face = "smile"; await say(S, "이제 아무 데도 안 가도 돼.");
+  await choose(["잠깐 화장실 좀."]);
+  await say("", "(일어서는데, 서아가 내 손목을 잡는다.)");
+  vn.face = "wrong"; await say(S, "두고 가지 마.", { speed: 110 });
+  box.hidden = true; vn.big = false; vn.danFace = true; stinger(); try { navigator.vibrate && navigator.vibrate(300); } catch (e) {}
+  await wait(1300);
+  vn.scene = "black"; vn.danFace = false; await wait(1200); $("vn").hidden = true;
+  buzz.gain.gain.value = 0.025;
+}
+/** 마지막 출구: 오르골을 감으면 문이 열림 → 가짜 탈출 → 단장이 막아섬 → 사연 확인 → 멜로디로 나감. */
+async function exitFinale(buzz) {
+  const ex = W3.doors["1,1"], dan = W3.danMesh;
+  W3.dan.mode = "off"; dan.visible = false; W3.cut = true;
+  W3.lookTarget = W3.seoaMesh; await wait(800); W3.lookTarget = null;
+  vn.face = "calm"; await say(S, "부품 다 모았어. 감을게."); box.hidden = true; vn.big = false;
+  await playOrgel({ vol: 0.07 });
+  ex.open = true; burst(260, 0.3, 0.2); W3.seoaMesh.visible = false;
+  await new Promise((done) => { W3.auto = { t0: performance.now(), ms: 1600, from: { x: W3.x, z: W3.z }, to: { x: ex.x, z: ex.z + 0.2 }, yaw: 0, done }; });
+  W3.auto = null; W3.ended = true; $("world").hidden = true;
+  await fakeEscape(buzz);
+  // 다시 복도. 출구 앞을 단장이 막고 있다
+  ex.open = false; ex.mesh.position.y = 1.5;
+  W3.x = cw(1); W3.z = cz(3) + 0.6; W3.yaw = 0; W3.pitch = 0;
+  W3.seoa = { x: cw(1) + 0.55, z: cz(3) - 0.2 }; W3.seoaMesh.visible = true; W3.seoaGone = true;
+  dan.position.set(cw(1), 1.3, cz(2) - 0.2); dan.visible = true;
+  $("world").hidden = false; W3.ended = false; W3.last = 0; requestAnimationFrame(frame3); W3.cut = true;
+  W3.lookTarget = W3.seoaMesh; await wait(500);
+  vn.face = "worry"; await say(S, "야! 정신 차려!");
+  await say(S, "너 문 앞에서 멈춰 서서… 혼자 웃고 있었어.");
+  box.hidden = true; vn.big = false; W3.lookTarget = dan; await wait(1000);
+  await say("단장", "좋았지? 내가 보여 준 거야.", { pitch: 220 });
+  await say("단장", "나도 매일 그걸 봐.", { pitch: 220 });
+  const frags = W3.items.filter((i) => i.kind === "frag" && i.got).length;
+  await say("단장", "나도 너희처럼 둘이 왔어.", { pitch: 220 });
+  await say("단장", "걔는 들판에서 빵을 굽고 있지. 웃으면서.", { pitch: 220 });
+  await say("단장", "누가 내 자리를 맡으면, 나는 나갈 수 있대.", { pitch: 220 });
+  await say("단장", "그러니까 한 명만. 한 명만 남아 주면 돼.", { pitch: 200, speed: 70 });
+  if (frags >= 2) await say("", "(사원증. 놀이공원 사진. 거울의 줄들. 조각이 맞춰진다.)");
+  W3.lookTarget = W3.seoaMesh; await wait(600);
+  vn.face = "worry"; await say(S, "……미안해요.");
+  await say(S, "우린 둘 다 나가요.");
+  box.hidden = true; vn.big = false;
+  await say("", "(서아가 오르골 태엽을 다시 감는다.)"); box.hidden = true;
+  W3.lookTarget = dan;
+  const tune = playOrgel({ vol: 0.07, hum: true });
+  await wait(1800);
+  await say("", "(단장이 막지 않는다. 오르골 노래를 따라 낮게 흥얼거린다.)", { auto: 2200 }); box.hidden = true;
+  await walkTo(dan, { x: cw(1) + 0.75, z: cz(2) + 0.4 }, 1800);
+  await tune;
+  W3.lookTarget = null; ex.open = true; burst(260, 0.3, 0.2); W3.seoaMesh.visible = false;
+  await new Promise((done) => { W3.auto = { t0: performance.now(), ms: 2000, from: { x: W3.x, z: W3.z }, to: { x: ex.x, z: ex.z - 0.4 }, yaw: 0, done }; });
+  W3.auto = null; W3.ended = true;
+  await say("", "(뒤에서 흥얼거림이 계속된다. 단장 대신 남는 사람은 아무도 없다.)");
+  await say("", "(우린 저렇게 안 돼.)");
+  box.hidden = true; buzz.stop();
+}
+/** 3장 전체: 관람 → 무대 뒤 추격(부품 셋 + 흔적 셋, 숨기, 갈림길) → 마지막 출구. */
+function ch3Circus() {
+  return new Promise((resolve) => {
+    vn.scene = "black"; $("vn").hidden = true; box.hidden = true; $("flash").classList.remove("on");
+    if (!renderer) { buildCircus(); makeItems(); }
+    $("world").hidden = false; resize3D();
+    const buzz = startBuzz();
+    W3.ended = false; W3.last = 0; W3.phase = "tent"; W3.watch = true; W3.eyeY = 1.25; W3.dan.mode = "off";
+    const ms = W3.mySeat; W3.x = ms.x; W3.z = ms.z; W3.yaw = Math.atan2(ms.x, ms.z); W3.pitch = 0;
+    W3.seoaFixed = true; W3.seoa = { x: W3.seoaSeat.x, z: W3.seoaSeat.z };
+    requestAnimationFrame(frame3);
+    const busy = (f) => { if (W3.busy) return; W3.busy = true; f().finally(() => { W3.busy = false; box.hidden = true; vn.big = false; }); };
+    let nextLockHint = 0;
+    circusHooks = {
+      backTick: (now) => {
+        if (W3.busy) return;
+        // 부품·흔적 줍기 (멈추지 않게 위쪽 안내로만)
+        W3.items.forEach((it) => {
+          if (it.got || Math.hypot(W3.x - it.x, W3.z - it.z) > 1.1) return;
+          it.got = true; it.mesh.visible = false;
+          if (it.kind === "part") { [0, 120].forEach((d) => setTimeout(() => blip(1046 + d * 2, 0.04), d)); hint("태엽 부품을 주웠다 (" + partsGot() + "/3)", 3000); }
+          else { blip(660, 0.03); hint(it.text, 6500); }
+        });
+        const cx = Math.floor((W3.x - BX) / BC), cy = Math.floor(W3.z / BC), D = W3.dan;
+        if (!W3.aheadDone && cy === 7 && cx >= 8) {
+          W3.aheadDone = true; Object.assign(D, { mode: "ahead", x: cw(18), z: cz(7) }); W3.danMesh.visible = true;
+          flicker3(); burst(200, 0.4, 0.3); stinger();
+        }
+        if (W3.aheadDone && !W3.slamDone && W3.z < cz(5) - 0.2 && cx === 13) {
+          W3.slamDone = true; const door = W3.doors["13,6"]; door.open = false; door.locked = true; burst(120, 0.4, 0.4);
+          D.mode = "wait"; W3.danMesh.visible = false;
+          [1200, 2000, 2900].forEach((ms2) => setTimeout(() => burst(90, 0.3, 0.4), ms2));
+        }
+        if (W3.hide === 0 && cx >= 9 && W3.x < cw(11) + 1 && cy >= 3 && cy <= 5) {
+          W3.hide = 1; const d2 = W3.doors["12,3"]; d2.open = false; d2.locked = true; burst(120, 0.4, 0.4);
+          busy(async () => {
+            W3.cut = true; W3.lookTarget = { position: new THREE.Vector3(HIDE.x, 1, HIDE.z) };
+            vn.face = "worry"; await say(S, "숨어. 저 옷 뒤에!"); box.hidden = true;
+            W3.lookTarget = null; W3.cut = false; W3.hideT = performance.now() + 7000;
+            [1500, 3500, 5500].forEach((ms2) => setTimeout(() => W3.hide === 1 && burst(90, 0.3, 0.5), ms2));
+          });
+          return;
+        }
+        if (W3.hide === 1) {
+          if (Math.hypot(W3.x - HIDE.x, W3.z - HIDE.z) < 0.8) { W3.hide = 2; busy(hideScene); return; }
+          if (now > W3.hideT) { W3.hide = 9; const d2 = W3.doors["12,3"]; d2.open = true; burst(70, 0.6, 0.5); flicker3(); Object.assign(D, { mode: "ahead", x: d2.x, z: d2.z }); W3.danMesh.visible = true; }
+        }
+        if (W3.hide === 3) {
+          if (now > W3.nextVoice) { W3.nextVoice = now + 4500; voiceAt(W3.voice); }
+          const f = W3.deadFig;
+          if (f.visible && Math.hypot(W3.x - f.position.x, W3.z - f.position.z) < 2.6) { f.visible = false; flicker3(); burst(90, 0.4, 0.4); stinger(); }
+          if (!W3.seoaAtExit && Math.hypot(W3.x - cw(1), W3.z - cz(2)) < 5) { W3.seoaAtExit = true; W3.seoa = { x: cw(1), z: cz(1) + 0.7 }; W3.seoaMesh.visible = true; }
+          const ex = W3.doors["1,1"];
+          if (Math.hypot(W3.x - ex.x, W3.z - ex.z) < 2.3) {
+            if (partsGot() >= 3) busy(async () => { await exitFinale(buzz); resolve(); });
+            else if (now > nextLockHint) { nextLockHint = now + 4000; hint("문이 안 열린다. 오르골 태엽 부품이 모자라 (" + partsGot() + "/3)\n막다른 길도 확인해 봐", 3500); }
+          }
+        }
+      },
+      caught: () => busy(async () => {
+        W3.dan.mode = "off"; stinger(); try { navigator.vibrate && navigator.vibrate(250); } catch (e) {}
+        W3.ended = true; $("world").hidden = true; await wait(1600);
+        resetBack(); $("world").hidden = false; W3.ended = false; W3.last = 0; requestAnimationFrame(frame3);
+        hint("주운 부품은 그대로야 (" + partsGot() + "/3)", 3000);
+      }),
+    };
+    W3.cut = true;
+    busy(async () => {
+      await circusShowV3();
+      $("world").hidden = true; await wait(900);
+      resetBack(); $("world").hidden = false;
+      hint("뛰어! 태엽 부품 3개를 찾아\nWASD·방향키로 걷기, 끌어서 둘러보기\n폰: 왼쪽 아래를 누른 채 밀기", 9000);
+    });
+  });
+}
+
+/* ===================== 4장: 귀환 (게임 클리어 팡파레) ===================== */
+/** 찬란한 빛, 팡파레, 사방의 박수. 축하 글씨는 1장 시스템 안내와 같은 초록 글꼴·같은 목소리. 그리고 아침의 내 방. */
+async function ch4Return() {
+  $("world").hidden = true; $("vn").hidden = true; box.hidden = true;
+  const fl = $("flash"); fl.style.transition = "opacity 0.4s"; fl.classList.add("on"); fanfare(); await wait(1400);
+  $("term").hidden = false; termLog.innerHTML = ""; TERM.alive = true; requestAnimationFrame(drawTermHead);
+  fl.classList.remove("on"); await wait(500); fl.style.transition = "";
+  await tl("SYS", "축하드립니다!", { big: true, speed: 70, hold: 600 });
+  await tl("SYS", "탈출에 성공하셨습니다.", { big: true, speed: 60, hold: 1800 });
+  clap(2.5); await wait(1200);
+  TERM.alive = false; fl.classList.add("on"); await wait(1400); $("term").hidden = true;
+  // 아침, 내 방
+  $("vn").hidden = false; vn.scene = "studio"; vn.day = true; vn.crt = 0; vn.unplug = true; fl.classList.remove("on");
+  const morning = startMorning(); await wait(1500);
+  await say("", "(눈을 뜬다. 내 방이다. 아침이다.)");
+  await say("", "(컴퓨터는 꺼져 있다. 코드가 뽑혀 바닥에 늘어져 있다.)");
+  vn.face = "calm"; await say(S, "…꿈이었나?");
+  const a = await choose(["같은 꿈을 꿨나 봐.", "꿈 아니었어."]);
+  vn.face = "smile"; await say(S, a === 0 ? "둘이 똑같은 꿈? 그게 더 무섭다." : "응. …근데 이제 됐어. 나왔잖아.");
+  await say("", "(서아 가방에 오르골 키링이 달려 있다.)"); jingle();
+  box.hidden = true; vn.big = false; await wait(1200); morning();
+}
+
+/* ===================== 5장: 팽이 (파노라마 → 마지막 장면, 두 판) ===================== */
+const PANO = [
+  ["conv", "(야밤의 편의점 앞. 맥주 두 캔. 서아가 내 몫까지 반을 마신다.)"],
+  ["fire", "(불꽃 축제. 반지를 꺼내다 손이 떨려 떨어뜨린다. 서아가 웃으면서 주워 준다.)"],
+  ["office", "(상사한테 크게 깨진 날. 비가 오는데 서아가 우산 하나만 들고 회사 앞에 서 있다. 어깨는 둘 다 젖는다.)"],
+  ["newhome", "(신혼집으로 이사. 박스가 끝도 없다. 서아가 오르골을 책장 맨 위에 올려 둔다.)"],
+  ["baby", "(아이를 처음 안은 날. 너무 작아서 어떻게 안아야 할지 모르겠다. 이틀을 못 잤다.)"],
+  ["trip", "(첫 가족 여행. 아이는 바다보다 모래를 좋아한다. 돌아오는 길, 차가 막히고 셋 다 잠든다.)"],
+];
+/** 파노라마: 짧은 장면 연속. 장면마다 피곤함·불완전함 한 조각. */
+async function panorama() {
+  $("vn").hidden = false; vn.scene = "pano";
+  for (const [k, line] of PANO) { vn.pano = k; await say("", line, { small: true, speed: 40 }); }
+  vn.scene = "black"; await say("", "(이대로, 이 진짜 삶을 온몸으로 느끼며 살아가고 싶다.)", { small: true, speed: 55 });
+  box.hidden = true; await wait(1500);
+}
+/** 마지막 장면. A판 = 오르골 한 음만 틀어짐. B판 = 같고, 그 순간 서아가 한 박자 늦게 돌아봄 + 한 프레임 끊김. 글은 없다. */
+async function homeScene(ver) {
+  $("vn").hidden = false; box.hidden = true; vn.scene = "home"; vn.zoom = 1; vn.turn = null; vn.orgelShake = 0; vn.glitch = 0;
+  await wait(2600);
+  for (let k = 0; k <= 60; k++) { vn.zoom = 1 + 0.5 * (k / 60) * (k / 60); await wait(50); }
+  await wait(900);
+  await playOrgel({ vol: 0.07, wrongAt: 5, stopAfterWrong: true, onWrong: () => {
+    const now = performance.now(); vn.orgelShake = 1; vn.glitch = 1.2;
+    vn.turn = { me: now + 60, seoa: now + (ver === "B" ? 520 : 60) };
+    if (ver === "B") setTimeout(() => { vn.freezeUntil = performance.now() + 140; }, 520);
+    setTimeout(() => { vn.glitch = 0; vn.orgelShake = 0; }, 260);
+  } });
+  await wait(1800);
+  vn.scene = "black"; await wait(2200);
+}
+async function ch5Ending(ver) { await panorama(); await homeScene(ver); }
+
+/* ===================== 흐름 ===================== */
+let ENDV = "A";
+/** 끝 화면: 이번에 본 엔딩 판을 적고, 다른 판을 바로 볼 수 있게. */
+function showEnd() {
+  box.hidden = true; $("vn").hidden = true; $("world").hidden = true; $("hud").hidden = true;
+  $("endVer").textContent = "이번 엔딩: " + ENDV + "판 (A·B는 마지막 장면만 다름)"; $("end").hidden = false;
+}
+/** 처음부터 끝까지. from: 0 일상 · 1 채팅창 · 2 들판 · 3 서커스 · 4 귀환·엔딩. */
+async function main(from) {
+  requestAnimationFrame(frame);
+  if (from <= 0) await ch0Daily();
+  if (from <= 1) await ch1Chat();
+  if (from <= 2) { await ch2Field(); await ch2Under(); }
+  if (from <= 3) await ch3Circus();
+  await ch4Return(); await ch5Ending(ENDV);
+  store.set("main-visits", visits + 1);
+  showEnd();
+}
+const go = (from) => { initAudio(); $("start").hidden = true; main(from); };
+$("startBtn").addEventListener("click", () => go(0));
+document.querySelectorAll("#start .sub").forEach((b) => b.addEventListener("click", () => go(+b.dataset.from)));
+$("otherEndBtn").addEventListener("click", async () => {
+  ENDV = ENDV === "A" ? "B" : "A"; $("end").hidden = true; await homeScene(ENDV); showEnd();
+});
+$("againBtn").addEventListener("click", () => location.reload());
+</script>
