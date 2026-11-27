@@ -474,6 +474,17 @@ async function act(o) {
 }
 /** 화면 좌표 → 2D 맵 좌표. */
 function to2D(e) { const p = toCanvas(e); return { x: p.x, y: p.y - OY }; }
+/** 화면 좌표 → 캔버스 좌표 (object-fit: cover로 잘린 만큼 보정). */
+function toCanvas(e) {
+  const r = vc.getBoundingClientRect(), s = Math.max(r.width / 135, r.height / 240);
+  return { x: (e.clientX - r.left - (r.width - 135 * s) / 2) / s, y: (e.clientY - r.top - (r.height - 240 * s) / 2) / s };
+}
+/** 키보드(WASD·방향키)로도 걷기: 누르는 동안 그쪽으로 손가락을 대고 있는 것과 같게. */
+function keyWalk() {
+  const kx = (KEYS.d || KEYS.arrowright ? 1 : 0) - (KEYS.a || KEYS.arrowleft ? 1 : 0), ky = (KEYS.s || KEYS.arrowdown ? 1 : 0) - (KEYS.w || KEYS.arrowup ? 1 : 0);
+  if (kx || ky) { if (!W2.busy) { W2.hold = { x: W2.px + kx * 12, y: W2.py + ky * 12 }; W2.keyHold = true; W2.auto = null; } }
+  else if (W2.keyHold) { W2.hold = null; W2.keyHold = false; }
+}
 const vnEl = $("vn");
 vnEl.addEventListener("pointerdown", (e) => {
   if (!is2D() || W2.busy) return;
@@ -526,7 +537,7 @@ const ME = { body: "#2a2a3a", hair: "#16110f" }, SEOA2 = { body: "#5d6f8f", hair
 let last2D = 0;
 function draw2D(t) {
   const dt = Math.min(0.05, (t - (last2D || t)) / 1000); last2D = t;
-  move2D(dt);
+  keyWalk(); move2D(dt);
   if (W2.tick) W2.tick(t, dt);
   vx.fillStyle = "#020a07"; vx.fillRect(0, 0, 135, 240);
   W2.map.forEach((row, r) => { for (let c = 0; c < row.length; c++) drawTile(row[c], c, r, t); });
