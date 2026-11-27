@@ -3,7 +3,7 @@
 > 스포일러 없음. 대사·반전·물건·엔딩 두 판의 차이는 `script/secret/v3-first-build.md`에만 있어.
 
 - 파일: `paradise-v3.html` 하나 (그림은 `img/`의 서아 그림만, v2에서 가져옴)
-- 실행: 3D가 그림 파일을 읽어서 파일을 더블클릭하면 서커스가 안 될 수 있어. 레포 루트에서 `py -m http.server 8767 --directory builds/digital-circus/v3` → `localhost:8767/paradise-v3.html`. 또는 비공개 아티팩트.
+- 실행: 3D가 그림 파일을 읽어서 파일을 더블클릭하면 서커스가 안 될 수 있어. 레포 루트에서 `py -m http.server 8767 --directory builds/digital-circus/v3` → `localhost:8767/paradise-v3.html`. 또는 비공개 아티팩트 https://claude.ai/artifact/MUbxYn9ZgBVehQhyQ1Deae
 - 길이: 25분 안팎 (일상 2 · 채팅창 5 · 들판 8 · 서커스 8 · 귀환·엔딩 3)
 - 시작 화면에 장별 시작 버튼이 있어(확인용). 끝 화면에서 **엔딩 다른 판**을 바로 볼 수 있어.
 
