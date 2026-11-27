@@ -418,7 +418,8 @@ function retestReady() {
   if (!firstPractice) return { ok: true, msg: '이 기기에는 연습 기록이 없어요. 연습을 다른 기기에서 했다면 재시험을 바로 볼 수 있어요.' };
   const days = (Date.now() - firstPractice.ts) / 86400000;
   const done = loadLog().some(r => r.set === 'retest');
-  if (days < 2) return { ok: false, msg: `재시험까지 ${Math.ceil((2 - days) * 24)}시간 남았어요.` };
+  // 기록은 기기마다 따로라 이 기기의 날짜로는 막지 않고 안내만 한다 (원격 기기에서 연습 뒤 재시험이 잠긴 문제)
+  if (days < 2 && !done) return { ok: true, msg: '이 기기의 첫 연습이 이틀이 안 됐어요. 다른 기기에서 이미 이틀 전에 연습했다면 재시험을 봐도 돼요.' };
   return { ok: true, msg: done ? '재시험을 이미 한 번 봤어요. 다시 보면 처음 보는 문단이 아니게 돼요.' : '재시험이 열렸어요. 처음 보는 주제 12문항이에요.' };
 }
 
