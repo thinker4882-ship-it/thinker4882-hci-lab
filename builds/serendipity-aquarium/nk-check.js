@@ -1,10 +1,12 @@
 // NK 지형에서 연결 방식에 따른 장단기 역전이 나오는지 확인하는 실험 (Lazer & Friedman 2007 설정을 따름)
-// 실행: node nk-check.js
+// 실행: node nk-check.js [지형 수] [mix]   (mix를 붙이면 모든 팀에 섞기 규칙을 켠다)
 // 레시피 = 예/아니오 선택 20개. 선택마다 다른 선택 K개와 얽혀 점수가 정해진다.
 
 /** 시드가 같으면 같은 난수 (mulberry32, 공개 도메인) */
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
+/** 1인 비트 수 = 두 레시피가 다른 스위치 수 */
+const popcount = x => { let c = 0; while (x) { x &= x - 1; c++; } return c; };
 const N = 20, K = 5, PEOPLE = 60, NKS = new Map();
 
 /** NK 지형: 선택 i의 기여는 자기와 이웃 K개(바로 오른쪽 K개, 원형)의 값 조합으로 정해진다 */
@@ -31,39 +33,49 @@ function makeNet(kind, rng) {
 }
 
 /** 한 판: 매 라운드 각자 이웃 중 최고가 나보다 나으면 따라 하고, 아니면 선택 하나를 바꿔 보고 나으면 채택 */
-function run(kind, seed, T = 300, rhythm = 0) {
+function run(kind, seed, T = 300, rhythm = 0, mix = false) {
   // 같은 시드면 네 연결 방식이 같은 지형·같은 출발점을 쓰도록 지형은 따로 만들어 재사용 (최고점 계산이 무거움)
   if (!NKS.has(seed)) NKS.set(seed, makeNK(mulberry32(seed)));
   const rng = mulberry32(seed + 1e6), f = NKS.get(seed), nb = makeNet(kind, rng);
   let sol = Array.from({ length: PEOPLE }, () => Math.floor(rng() * (1 << N)));
-  const out = [];
+  const out = []; let sparks = 0;
   for (let t = 0; t < T; t++) {
     const sc = sol.map(f), next = sol.slice();
     const connected = !rhythm || t % rhythm === rhythm - 1; // 리듬: rhythm 라운드에 한 번만 서로 본다
     for (let a = 0; a < PEOPLE; a++) {
       let best = -1;
       if (connected) for (const b of nb[a]) if (best < 0 || sc[b] > sc[best]) best = b;
+      // 섞기(불꽃): 아무 이웃 하나와 레시피가 적당히 다르면(4~12개 다름) 스위치를 절반씩 섞어 본다. 나·그 사람·최고 이웃 모두보다 나으면 채택
+      if (mix && connected && nb[a].length) {
+        const b = nb[a][Math.floor(rng() * nb[a].length)], diff = popcount(sol[a] ^ sol[b]);
+        if (diff >= 4 && diff <= 12) {
+          let mask = 0; for (let i = 0; i < N; i++) if (rng() < 0.5) mask |= 1 << i;
+          const child = (sol[a] & mask) | (sol[b] & ~mask & ((1 << N) - 1)), fc = f(child);
+          if (fc > sc[a] && fc > sc[b] && (best < 0 || fc > sc[best])) { next[a] = child; sparks++; continue; }
+        }
+      }
       if (best >= 0 && sc[best] > sc[a]) next[a] = sol[best];
       else { const c = sol[a] ^ (1 << Math.floor(rng() * N)); if (f(c) > sc[a]) next[a] = c; }
     }
     sol = next;
     const s = sol.map(f);
-    out.push({ mean: s.reduce((x, y) => x + y) / PEOPLE, best: Math.max(...s), distinct: new Set(sol).size });
+    out.push({ mean: s.reduce((x, y) => x + y) / PEOPLE, best: Math.max(...s), distinct: new Set(sol).size, sparks });
   }
   return out;
 }
 
 // 같은 지형 여러 개에서 네 연결 방식을 비교
-const KINDS = [['모두 연결', 'full', 0], ['느슨한 줄', 'line', 0], ['방 + 통로', 'rooms', 0], ['모두 연결 + 리듬(5라운드에 한 번)', 'full', 5]];
+const BASE = [['모두 연결', 'full', 0], ['각자 연구', 'none', 0], ['느슨한 줄', 'line', 0], ['방 + 통로', 'rooms', 0], ['리듬(5라운드에 한 번)', 'full', 5]];
+const KINDS = process.argv[3] === 'mix' ? BASE.map(([n, k, r]) => [n + ' +섞기', k, r, true]) : BASE;
 const SEEDS = +(process.argv[2] || 40), T = 300, marks = [5, 10, 20, 40, 80, 150, 299];
-const res = KINDS.map(([name, kind, rh]) => {
-  const acc = marks.map(() => ({ mean: 0, best: 0, distinct: 0 })), finals = [];
-  for (let s = 0; s < SEEDS; s++) { const r = run(kind, 7000 + s, T, rh); marks.forEach((m, k) => { for (const key in acc[k]) acc[k][key] += r[m][key] / SEEDS; }); finals.push(r[T - 1].mean); }
+const res = KINDS.map(([name, kind, rh, mix]) => {
+  const acc = marks.map(() => ({ mean: 0, best: 0, distinct: 0, sparks: 0 })), finals = [];
+  for (let s = 0; s < SEEDS; s++) { const r = run(kind, 7000 + s, T, rh, mix); marks.forEach((m, k) => { for (const key in acc[k]) acc[k][key] += r[m][key] / SEEDS; }); finals.push(r[T - 1].mean); }
   return { name, acc, finals };
 });
-console.log(`지형 ${SEEDS}개 평균. 칸 = 평균 점수 / 최고 점수 / 서로 다른 레시피 수`);
+console.log(`지형 ${SEEDS}개 평균. 칸 = 평균 점수 / 서로 다른 레시피 수 / 누적 불꽃`);
 console.log('라운드'.padEnd(26) + marks.map(m => String(m + 1).padStart(18)).join(''));
-for (const r of res) console.log(r.name.padEnd(24) + r.acc.map(a => `${a.mean.toFixed(3)}/${a.best.toFixed(3)}/${a.distinct.toFixed(0)}`.padStart(18)).join(''));
+for (const r of res) console.log(r.name.padEnd(24) + r.acc.map(a => `${a.mean.toFixed(3)}/${a.distinct.toFixed(0)}/${a.sparks.toFixed(0)}`.padStart(18)).join(''));
 // 끝 점수에서 '모두 연결'과의 차이와 표준오차
 const base = res[0].finals;
 for (const r of res.slice(1)) { const d = r.finals.map((v, i) => v - base[i]), m = d.reduce((x, y) => x + y) / d.length, se = Math.sqrt(d.reduce((x, y) => x + (y - m) ** 2, 0) / (d.length - 1) / d.length); console.log(`끝 평균 점수: ${r.name} − 모두 연결 = ${m.toFixed(3)} ± ${se.toFixed(3)}`); }
