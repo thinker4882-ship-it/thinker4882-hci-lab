@@ -33,4 +33,5 @@
 - 소리는 사용자가 누른 뒤에만 시작(브라우저 정책).
 - 이미지: 힉스필드 결과는 `assets/`에 내려받아 쓴다(`HANDOFF.md` 부록 A).
 - **외부 라이브러리·오픈소스 적극 활용 (11/25 사용자 결정)**: 맵·게임 트릭을 처음부터 짜지 말고 검증된 것을 가져오거나 참조·변형한다. 후보: Phaser/Kaplay(2D 프레임워크), Tiled(맵 편집기), Kenney 등 CC0 에셋, Ink(대화 분기), EasyStar.js(길찾기), Three.js(3D). 쓸 때는 이유를 주석·README에 한 줄, 라이선스(MIT/GPL/에셋 허락)를 확인한다.
+- **게임 개발 스킬 (11/28 설치)**: 레포 루트 `.claude/skills/`에 gamedev-skills/awesome-gamedev-agent-skills(Apache-2.0)에서 14개만 골라 깔았다. 이 게임에 쓸 곳: `level-design`(왜 사슬·막힘 검사, "가르치기 전에 시험하지 않기"), `game-ai`(추격자는 다 아는 척 말고 마지막으로 본 곳을 쫓기), `create-game-assets`(AI 이미지·3D 품질 검사와 출처 기록), `threejs-*`(GLB 불러오기·조명), `shader-programming`(PS1풍), `prototype-fast`(질문 하나짜리 시제품). `dialogue-systems`는 대화 분기 구조용이라 대사 말투 문제는 못 푼다. 갱신: `npx skills add gamedev-skills/awesome-gamedev-agent-skills -a claude-code --skill <이름>`.
 - **구현 방법은 Claude도 적극 제안 (11/25 사용자 요청)**: 구현할 때 더 나은 방안·개선 여지가 보이면 묻지 않아도 먼저 말한다. (설계 질문에 추천을 안 붙이는 규칙은 이야기·원리 층에만 해당. 구현 방법은 예외.)
