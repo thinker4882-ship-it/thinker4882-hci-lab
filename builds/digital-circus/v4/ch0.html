@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>낙원 서비스 · 0장</title>
+<!-- Galmuri: 한글 도트 글꼴, SIL OFL 라이선스. 화면 아래 큰 도트 자막용 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:Galmuri11,monospace;color:#fff;user-select:none}
+  #view{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;cursor:default}
+  #view.hot{cursor:pointer}
+  #label{position:absolute;padding:2px 6px;background:#000c;font-size:14px;pointer-events:none;display:none}
+  #box{position:absolute;left:4%;right:4%;bottom:3%;min-height:110px;display:none;pointer-events:none}
+  #box .name{font-family:Galmuri14;font-size:20px;color:#ffe066;text-shadow:2px 2px 0 #000;margin:0 0 6px 4px}
+  #box .text{font-family:Galmuri14;font-size:26px;line-height:1.45;text-shadow:3px 3px 0 #000,-1px -1px 0 #000;letter-spacing:1px}
+  #portrait{position:absolute;right:3%;bottom:150px;width:170px;display:none;image-rendering:auto;filter:drop-shadow(4px 4px 0 #000)}
+  #choices{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);display:none;flex-direction:column;gap:12px}
+  #choices button{font-family:Galmuri14;font-size:22px;background:#111e;color:#fff;border:3px solid #fff;padding:10px 26px;cursor:pointer}
+  #choices button:hover{background:#ffe066;color:#000}
+  #fade{position:absolute;inset:0;background:#000;opacity:1;pointer-events:none;transition:opacity .8s}
+  #start{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#000;cursor:pointer}
+  #start h1{font-family:Galmuri14;font-size:40px;margin:0;letter-spacing:4px}
+  #start p{font-size:16px;opacity:.7;margin:0}
+  #end{position:absolute;inset:0;display:none;background:#000;color:#3f3;font-family:GalmuriMono11;font-size:22px;padding:8% 10%;white-space:pre-wrap}
+  #err{position:absolute;top:10px;left:10px;color:#f66;font-size:14px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="label"></div>
+<img id="portrait" alt="">
+<div id="box"><div class="name"></div><div class="text"></div></div>
+<div id="choices"></div>
+<div id="fade"></div>
+<div id="end"></div>
+<div id="start"><h1>낙원 서비스</h1><p>0장 · 일상</p><p>클릭해서 시작 (소리 켜기)</p></div>
+<div id="err"></div>
+
+<!-- three.js r128: 저폴리 3D 방 (v2·v3에서 검증한 버전), MIT 라이선스 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- inkjs 2.3.2 full: Ink 대본을 브라우저에서 바로 컴파일·실행. 대사를 코드와 분리하려고 씀. MIT 라이선스 -->
+<script src="https://cdn.jsdelivr.net/npm/inkjs@2.3.2/dist/ink-full.js"></script>
+<script>
+// ───────────────────────── 설정 ─────────────────────────
+// 대본은 비밀 폴더에만 있음(스포일러 규칙). 서버 루트 = builds/digital-circus
+const INK_URL = '../script/secret/v4-ch0.ink';
+const LOW_W = 400, LOW_H = 250;            // PS1풍 저해상도 렌더 크기
+const $ = id => document.getElementById(id);
+
+// ───────────────────────── 소리 (WebAudio 합성) ─────────────────────────
+let AC = null, master = null, humNode = null;
+/** 오디오 시작 (클릭 뒤에만 가능) */
+function initAudio(){ AC = new AudioContext(); master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination); }
+/** 짧은 음 하나 */
+function tone(freq, dur, type='sine', vol=.2, when=0){
+  if(!AC) return; const t = AC.currentTime + when, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t+dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t+dur+.05);
+}
+/** 잡음 한 덩이 (덜컹·철컥) */
+function noise(dur, vol=.3, freq=800, when=0){
+  if(!AC) return; const t = AC.currentTime + when, n = AC.createBufferSource(), b = AC.createBuffer(1, AC.sampleRate*dur, AC.sampleRate);
+  const d = b.getChannelData(0); for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1) * (1 - i/d.length);
+  const f = AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value = freq; const g = AC.createGain(); g.gain.value = vol;
+  n.buffer = b; n.connect(f).connect(g).connect(master); n.start(t);
+}
+/** 배경 웅웅 소리 (버스 엔진 / 형광등·세탁기) */
+function hum(freq, vol){
+  if(!AC) return; if(humNode){ humNode.g.gain.setTargetAtTime(0, AC.currentTime, .3); humNode.o.stop(AC.currentTime+1.5); }
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type='sawtooth'; o.frequency.value = freq; f.type='lowpass'; f.frequency.value = 180; g.gain.value = 0;
+  o.connect(f).connect(g).connect(master); o.start(); g.gain.setTargetAtTime(vol, AC.currentTime, .5); humNode = {o,g};
+}
+/** 효과음 이름 → 소리 */
+const SFX = {
+  keyring(){ [2093,2637,3136].forEach((f,i)=>tone(f,.25,'triangle',.08,i*.07)); },
+  washer_start(){ noise(.6,.25,300); tone(880,.12,'square',.08,.1); },
+  washer_done(){ [0,.35,.7].forEach(w=>tone(1320,.18,'square',.1,w)); },
+  washer_open(){ noise(.25,.3,1200); },
+  can(){ noise(.3,.4,500); tone(220,.2,'triangle',.15,.15); },
+  door_lock(){ noise(.12,.6,2500); tone(140,.15,'square',.2); },
+  door_rattle(){ for(let i=0;i<5;i++) noise(.08,.45,1500,i*.09); },
+  phone_ring(){ for(let i=0;i<3;i++){ tone(440,.9,'sine',.1,i*1.4); tone(480,.9,'sine',.1,i*1.4); } },
+  phone_cut(){ [0,.3,.6].forEach(w=>tone(480,.2,'square',.08,w)); },
+  latch(){ noise(.05,.6,4000); noise(.08,.3,900,.06); },
+  blip(){ tone(520+Math.random()*80,.03,'square',.025); },
+};
+
+// ───────────────────────── 3D 기본 ─────────────────────────
+const renderer = new THREE.WebGLRenderer({canvas:$('view'), antialias:false});
+renderer.setPixelRatio(1); renderer.setSize(LOW_W, LOW_H, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.BasicShadowMap; // 진한 그림자
+const camera = new THREE.PerspectiveCamera(50, LOW_W/LOW_H, .1, 200);
+let scene = new THREE.Scene();
+const clock = new THREE.Clock();
+const loader = new THREE.TextureLoader();
+
+/** 저해상도 텍스처 (도트 느낌: 최근접 필터) */
+function px(tex){ tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; return tex; }
+/** 캔버스에 그려서 텍스처 만들기 */
+function canvasTex(w, h, draw){ const c = document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'), w, h); return px(new THREE.CanvasTexture(c)); }
+/** 단색 상자 하나 */
+function box(w,h,d,color,x,y,z,opts={}){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color, map:opts.map||null, emissive:opts.emissive||0}));
+  m.position.set(x,y,z); m.castShadow = opts.cast!==false; m.receiveShadow = true; scene.add(m); return m;
+}
+/** 바닥에 까는 판 */
+function plane(w,h,mat,x,y,z,rx=0,ry=0){ const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat); m.position.set(x,y,z); m.rotation.set(rx,ry,0); m.receiveShadow=true; scene.add(m); return m; }
+
+// ───────────────────────── 캐릭터 판 (빌보드) ─────────────────────────
+const TEX = {};
+/** 사람 하나 = 카메라를 늘 바라보는 2D 판 + 발밑 진한 그림자 */
+function makePerson(tex, height){
+  const ratio = tex.image.width / tex.image.height;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, alphaTest:.5}));
+  spr.scale.set(height*ratio, height, 1); spr.center.set(.5, 0);
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(.32, 12), new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:.55}));
+  sh.rotation.x = -Math.PI/2;
+  const g = new THREE.Group(); g.add(spr); g.add(sh); sh.position.y = .01;
+  return {g, spr, target:null, speed:1.8, onArrive:null};
+}
+
+// ───────────────────────── 대화 (Ink) ─────────────────────────
+let story = null, busy = false, advance = null;
+const box_ = $('box'), nameEl = box_.querySelector('.name'), textEl = box_.querySelector('.text'), portrait = $('portrait');
+let seoaFace = 'calm';
+/** 대사 한 줄 보여 주기 (글자 하나씩, 클릭하면 다음) */
+function showLine(who, text){
+  return new Promise(res => {
+    box_.style.display = 'block'; nameEl.textContent = who || ''; textEl.textContent = '';
+    portrait.style.display = who==='서아' ? 'block' : 'none'; if(who==='서아') portrait.src = `img/seoa-${seoaFace}.png`;
+    let i = 0, done = false;
+    const tick = setInterval(() => { if(i>=text.length){ clearInterval(tick); done = true; return; } textEl.textContent += text[i++]; if(i%2) SFX.blip(); }, 38);
+    advance = () => { if(!done){ clearInterval(tick); textEl.textContent = text; done = true; } else { advance = null; res(); } };
+  });
+}
+/** 선택지 보여 주고 고른 번호 돌려주기 */
+function showChoices(list){
+  return new Promise(res => {
+    const el = $('choices'); el.innerHTML = ''; el.style.display = 'flex';
+    list.forEach((c,i) => { const b = document.createElement('button'); b.textContent = c.text; b.onclick = e => { e.stopPropagation(); el.style.display='none'; res(i); }; el.appendChild(b); });
+  });
+}
+/** 태그(# face/sfx/ev) 처리 */
+async function handleTags(tags){
+  for(const t of tags){ const [k,v] = t.split(':').map(s=>s.trim());
+    if(k==='face') seoaFace = v; else if(k==='sfx' && SFX[v]) SFX[v](); else if(k==='ev' && EV[v]) await EV[v](); }
+}
+/** Ink 장면(knot) 하나 끝까지 돌리기 */
+async function runKnot(name){
+  busy = true; story.ChoosePathString(name);
+  while(true){
+    while(story.canContinue){
+      const raw = story.Continue().trim(); await handleTags(story.currentTags);
+      if(!raw) continue; const m = raw.match(/^(나|서아):\s*(.*)$/);
+      await showLine(m ? m[1] : '', m ? m[2] : raw);
+    }
+    if(!story.currentChoices.length) break;
+    const i = await showChoices(story.currentChoices); story.ChooseChoiceIndex(i);
+  }
+  box_.style.display = 'none'; portrait.style.display = 'none'; busy = false;
+}
+
+// ───────────────────────── 장면 1: 버스 ─────────────────────────
+let busLights = [];
+/** 밤 버스 안 (고정 카메라, 대화만) */
+function buildBus(){
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x05060c); scene.fog = new THREE.Fog(0x05060c, 6, 20);
+  scene.add(new THREE.AmbientLight(0x8890b0, .55));
+  const tube = new THREE.PointLight(0xdfe8ff, 1.1, 10); tube.position.set(0,2.3,0); tube.castShadow = true; scene.add(tube);
+  plane(3,14,new THREE.MeshLambertMaterial({color:0x3b3f4a}),0,0,0,-Math.PI/2);                   // 바닥
+  box(3,.05,14,0xd8d8d0,0,2.5,0,{cast:false});                                                   // 천장
+  box(.05,1,14,0x2f5d8a,-1.5,.5,0); box(.05,1,14,0x2f5d8a,1.5,.5,0);                             // 아래 벽(파랑)
+  box(.05,.4,14,0xd8d8d0,-1.5,2.3,0); box(.05,.4,14,0xd8d8d0,1.5,2.3,0);                        // 위 벽
+  for(let z=-6; z<=5; z+=1.3){ box(.9,.5,.5,0x7a1f2b,-.9,.45,z); box(.9,.9,.12,0x7a1f2b,-.9,.8,z+.25);   // 좌석
+                               box(.9,.5,.5,0x7a1f2b,.9,.45,z);  box(.9,.9,.12,0x7a1f2b,.9,.8,z+.25); }
+  for(let i=0;i<3;i++) box(.04,2.5,.04,0xffd23f,(i%2?.55:-.55),1.25,-3+i*3);                      // 노란 손잡이 봉
+  busLights = [];                                                                               // 창밖으로 흐르는 불빛
+  for(let i=0;i<6;i++){ const l = new THREE.Mesh(new THREE.PlaneGeometry(.5,.25), new THREE.MeshBasicMaterial({color: i%2?0xffb347:0xffffff}));
+    l.position.set(-1.56, 1.6+Math.random()*.4, -7+i*2.6); l.rotation.y = Math.PI/2; scene.add(l); busLights.push(l); }
+  const me = makePerson(TEX.me, 1.75), se = makePerson(TEX.seoa, 1.65);                         // 빈자리 없이 통로에 나란히 섬
+  me.g.position.set(.32,.02,2); se.g.position.set(-.3,.02,2.1); scene.add(me.g, se.g);
+  camera.position.set(.2,1.75,4.4); camera.lookAt(.2,1.05,0);
+}
+
+// ───────────────────────── 장면 2: 코인빨래방 ─────────────────────────
+const W = {}; // 빨래방 상태
+const clickables = [];
+/** 체크무늬 바닥 텍스처 */
+const checker = () => canvasTex(16,16,(g)=>{ for(let y=0;y<4;y++) for(let x=0;x<4;x++){ g.fillStyle=(x+y)%2?'#e9e4d4':'#2d6e6a'; g.fillRect(x*4,y*4,4,4); } });
+/** 글자 판 텍스처 */
+const signTex = (txt,bg,fg,w=64,h=24,size=10) => canvasTex(w,h,(g)=>{ g.fillStyle=bg; g.fillRect(0,0,w,h); g.fillStyle=fg; g.font=`${size}px Galmuri9, monospace`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,w/2,h/2+1); });
+
+/** 클릭할 수 있는 물건 등록 (이름표, 다가설 자리, 대본 knot) */
+function clickable(mesh, label, stand, knot){ mesh.userData = {label, stand, knot}; clickables.push(mesh); return mesh; }
+
+/** 빨래방 짓기: 방 10×7m, 카메라는 앞쪽 높은 곳에 고정 */
+function buildLaundry(){
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000); clickables.length = 0;
+  scene.add(new THREE.AmbientLight(0xbfd8ff, .72));
+  W.tubes = [[-2.5,0],[2.5,0]].map(([x,z]) => { const l = new THREE.PointLight(0xeef6ff, .95, 14); l.position.set(x,2.9,z); l.castShadow = true; l.shadow.mapSize.set(256,256); scene.add(l);
+    box(1.6,.06,.18,0xffffff,x,2.98,z,{emissive:0xffffff,cast:false}); return l; });
+  const ft = checker(); ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.repeat.set(5,3.5);
+  plane(10,7,new THREE.MeshLambertMaterial({map:ft}),0,0,0,-Math.PI/2);                                    // 바닥
+  W.floor = scene.children[scene.children.length-1];
+  const wallM = 0x5fc4b8;                                                                                // 민트 벽
+  box(10,3,.1,wallM,0,1.5,-3.5,{cast:false});                                                            // 뒷벽
+  box(.1,3,7,0xf2c14e,5,1.5,0,{cast:false});                                                             // 오른벽(노랑)
+  // 왼벽: 유리 앞문(z 0.4~2.2)과 창(z -2.8~-0.4) 자리를 비워 둠
+  box(.1,3,.7,wallM,-5,1.5,-3.15,{cast:false}); box(.1,3,.4,wallM,-5,1.5,0,{cast:false}); box(.1,3,1.3,wallM,-5,1.5,2.85,{cast:false});
+  box(.1,.9,2.4,wallM,-5,.45,-1.6,{cast:false}); box(.1,.5,2.4,wallM,-5,2.75,-1.6,{cast:false}); box(.1,.5,1.8,wallM,-5,2.75,1.3,{cast:false});
+  const glass = new THREE.MeshBasicMaterial({color:0x99ccff, transparent:true, opacity:.12});
+  plane(2.4,1.6,glass,-4.98,1.7,-1.6,0,Math.PI/2);                                                      // 창 유리
+  W.door = clickable(plane(1.8,2.5,glass.clone(),-4.97,1.25,1.3,0,Math.PI/2), '앞문', [-4.2,1.3], 'door');
+  box(.12,2.5,.08,0x888888,-4.98,1.25,.4); box(.12,2.5,.08,0x888888,-4.98,1.25,2.2); box(.12,.08,1.8,0x888888,-4.98,2.5,1.3);
+  W.doorSign = plane(.5,.2,new THREE.MeshBasicMaterial({map:signTex('자동문','#fff','#c00')}),-4.95,1.5,1.3,0,Math.PI/2);
+  // 세탁기 6대 (뒷벽)
+  W.washers = [];
+  for(let i=0;i<6;i++){ const x = -3.6+i*.95; const w = box(.85,1,.75,0xf4f4f4,x,.5,-3.05);
+    const drum = new THREE.Mesh(new THREE.CircleGeometry(.27,10), new THREE.MeshLambertMaterial({color:0x223344})); drum.position.set(x,.55,-2.67); scene.add(drum);
+    plane(.3,.12,new THREE.MeshBasicMaterial({map:signTex(`${i+1}`,'#222','#7f7',16,8,7)}),x,.92,-2.665);
+    W.washers.push(drum); if(i===1) clickable(w,'세탁기 2번',[x,-2.1],'washer'); }
+  W.myDrum = W.washers[1];
+  // 건조기 3대 (뒷벽 오른쪽, 위에 쌓임 없이 한 줄) — 3번은 아무도 없는데 돌아감
+  W.dryers = [];
+  for(let i=0;i<3;i++){ const x = 2.2+i*.95; const d = box(.85,1.5,.75,0xd9dde0,x,.75,-3.05);
+    const drum = new THREE.Mesh(new THREE.CircleGeometry(.3,10), new THREE.MeshLambertMaterial({color:0x111111, map: i===2 ? canvasTex(8,8,(g)=>{g.fillStyle='#333';g.fillRect(0,0,8,8);g.fillStyle='#b55';g.fillRect(0,0,4,3);g.fillStyle='#57b';g.fillRect(4,5,4,3);}) : null}));
+    drum.position.set(x,.9,-2.67); scene.add(drum); W.dryers.push(drum); if(i===2) clickable(d,'건조기 3번',[x,-2.1],'dryer'); }
+  // 직원용 뒷문 (뒷벽 맨 오른쪽 구석 → 오른벽 쪽)
+  W.back = new THREE.Group(); W.back.position.set(4.89,0,-2.2);
+  const bd = new THREE.Mesh(new THREE.BoxGeometry(.06,2.2,1), new THREE.MeshLambertMaterial({color:0x6b4a3a})); bd.position.set(0,1.1,.5); bd.castShadow=true; W.back.add(bd);
+  const st = new THREE.Mesh(new THREE.PlaneGeometry(.6,.2), new THREE.MeshBasicMaterial({map:signTex('STAFF ONLY','#fff','#000')})); st.position.set(-.04,1.75,.5); st.rotation.y=-Math.PI/2; W.back.add(st);
+  scene.add(W.back); clickable(bd,'직원용 문',[4.2,-1.7],'backdoor');
+  W.backLight = new THREE.PointLight(0xfff6d0, 0, 6); W.backLight.position.set(4.6,1.2,-1.7); scene.add(W.backLight);
+  // 문 뒤의 빛 판: 닫혀 있을 땐 문에 가려지고, 문이 열리면 드러남
+  W.crack = new THREE.Mesh(new THREE.PlaneGeometry(.98,2.18), new THREE.MeshBasicMaterial({color:0xfffbe8})); W.crack.position.set(4.935,1.1,-1.7); W.crack.rotation.y=-Math.PI/2; scene.add(W.crack);
+  // 자판기·게시판 (오른벽)
+  const vm = box(.7,1.9,1,0xc8282b,4.6,.95,.6,{emissive:0x220000});
+  plane(.02,.8,new THREE.MeshBasicMaterial({color:0xfff2b0}),4.24,1.3,.6,0,-Math.PI/2).scale.set(1,1,1);
+  plane(.8,.6,new THREE.MeshBasicMaterial({map:canvasTex(16,12,(g)=>{g.fillStyle='#ddd';g.fillRect(0,0,16,12);['#3a7','#e83','#c33','#37c','#fc0','#a5c'].forEach((c,i)=>{g.fillStyle=c;g.fillRect(1+(i%3)*5,1+Math.floor(i/3)*5,4,4);});})}),4.24,1.35,.6,0,-Math.PI/2);
+  clickable(vm,'자판기',[3.8,.6],'vending');
+  const bb = box(.05,1,1.6,0xa87b4f,4.94,1.6,2.3);
+  for(let i=0;i<6;i++) plane(.3,.36,new THREE.MeshBasicMaterial({color:[0xffffff,0xfff59d,0xb3e5fc,0xffccbc,0xffffff,0xc8e6c9][i]}),4.9,1.82-Math.floor(i/3)*.45,1.75+(i%3)*.5,0,-Math.PI/2);
+  plane(.32,.4,new THREE.MeshBasicMaterial({map:canvasTex(16,20,(g)=>{g.fillStyle='#f6f2ff';g.fillRect(0,0,16,20);g.fillStyle='#7cc';g.fillRect(2,3,12,7);g.fillStyle='#fff';g.fillRect(5,4,6,2);g.fillStyle='#333';for(let k=0;k<3;k++)g.fillRect(2,12+k*2,12,1);})}),4.89,1.6,2.3,0,-Math.PI/2);
+  clickable(bb,'게시판',[4.1,2.3],'board');
+  // 의자 (가운데, 세탁기를 바라봄)
+  const bench = box(2.4,.45,.6,0x2a4d8f,0,.23,0); box(2.4,.5,.1,0x2a4d8f,0,.7,.3);
+  clickable(bench,'의자',[0,.9],'chair');
+  // 바깥 거리 (앞문·창 너머)
+  W.outside = new THREE.Group(); scene.add(W.outside); buildOutside(0);
+  // 사람
+  W.me = makePerson(TEX.me, 1.75); W.se = makePerson(TEX.seoa, 1.65); W.se.speed = 1.75;
+  W.me.g.position.set(-4.2,0,1.3); W.se.g.position.set(-4.1,0,2.1); scene.add(W.me.g, W.se.g);
+  camera.position.set(.4,2.85,7.4); camera.lookAt(0,1.05,-1);                                          // 앞벽 없는 무대처럼 들여다봄
+  W.dryerSpin = true; W.myWash = false;
+}
+
+/** 바깥 풍경: stage 0 = 평범한 밤거리, 1 = 차·불빛이 멈춤, 2 = 끝없이 같은 가로등 */
+function buildOutside(stage){
+  const O = W.outside; while(O.children.length) O.remove(O.children[0]);
+  O.add(new THREE.Mesh(new THREE.PlaneGeometry(14,60), new THREE.MeshBasicMaterial({color: stage===2 ? 0x1d2a26 : 0x22252b})));
+  O.children[0].rotation.x = -Math.PI/2; O.children[0].position.set(-12,-.02,0);
+  const lamps = stage===2 ? 30 : 4;
+  for(let i=0;i<lamps;i++){ const z = stage===2 ? -28+i*2 : -6+i*4.5;
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(.08,2.6,.08), new THREE.MeshBasicMaterial({color:0x555555})); pole.position.set(-6.5,1.3,z); O.add(pole);
+    const bulb = new THREE.Mesh(new THREE.BoxGeometry(.4,.12,.25), new THREE.MeshBasicMaterial({color: stage===2 ? 0xfff4d6 : 0xffd27a})); bulb.position.set(-6.3,2.6,z); O.add(bulb); }
+  if(stage<2){
+    const shelter = new THREE.Mesh(new THREE.BoxGeometry(.8,2,2.4), new THREE.MeshBasicMaterial({color:0x3d6fb0})); shelter.position.set(-8,1,1.2); O.add(shelter);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(.8,.4), new THREE.MeshBasicMaterial({map:signTex('정류장','#fff','#235')})); sign.position.set(-7.58,1.7,1.2); sign.rotation.y=Math.PI/2; O.add(sign);
+    for(let i=0;i<5;i++){ const b = new THREE.Mesh(new THREE.BoxGeometry(3,2.6,4.6), new THREE.MeshBasicMaterial({color:0x101218})); b.position.set(-14,1.3,-10+i*5); O.add(b);
+      for(let k=0;k<6;k++){ const win = new THREE.Mesh(new THREE.PlaneGeometry(.5,.4), new THREE.MeshBasicMaterial({color: stage===0 && Math.random()<.6 ? 0xffe9a8 : 0x15171c})); win.position.set(-12.48,.7+Math.floor(k/2)*.6,-11+i*5+(k%2)*1.6); win.rotation.y=Math.PI/2; O.add(win); } }
+  }
+  W.cars = [];
+  if(stage===0) for(let i=0;i<2;i++){ const c = new THREE.Mesh(new THREE.BoxGeometry(1.6,.8,3.4), new THREE.MeshBasicMaterial({color: i?0xb03030:0xdddddd})); c.position.set(-10+i*2.5,.4,-25-i*18); O.add(c); W.cars.push(c); }
+  // 하늘 판: 벽 높이(3m)보다 낮게 두어 유리 너머로만 보임. 안개 대신 써서 방 안은 흐려지지 않음
+  const sky = new THREE.Mesh(new THREE.PlaneGeometry(80,3), new THREE.MeshBasicMaterial({color: stage===2 ? 0x9fb3a8 : 0x0a0d18}));
+  sky.position.set(-20,1.5,0); sky.rotation.y = Math.PI/2; O.add(sky); W.sky = sky;
+}
+
+// ───────────────────────── 연출 이벤트 (# ev:이름) ─────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fade = (to, ms=800) => { $('fade').style.transition = `opacity ${ms}ms`; $('fade').style.opacity = to; return sleep(ms); };
+const EV = {
+  bus_hum(){ hum(55,.12); },
+  laundry_hum(){ hum(100,.05); },
+  async sit(){ walkTo(W.me,[-.5,.05]); walkTo(W.se,[.5,.05]); await waitArrive(); },
+  async timeskip(){ await fade(1,900); W.myWash = false; await sleep(700); await fade(0,900); },
+  async flicker(){ for(const ms of [90,60,140]){ W.tubes.forEach(l=>l.intensity=0); await sleep(ms); W.tubes.forEach(l=>l.intensity=.95); await sleep(70); } },
+  async outside_1(){ buildOutside(1); lookOut(); await sleep(400); },
+  async outside_2(){ lookOut(); await sleep(600); buildOutside(2); lookOut(); },
+  async backdoor_open(){ for(let a=0;a<=.8;a+=.05){ W.back.rotation.y = -a; await sleep(30); } W.backLight.intensity = 2.2; },
+  async go_through(){ await Promise.all([walkTo(W.me,[4.7,-1.6]), walkTo(W.se,[4.5,-1.2])]); W.ending = true; },
+};
+
+// ───────────────────────── 걷기 ─────────────────────────
+let arriveWaiters = [];
+/** 목표 지점으로 걷기 (방 안으로 제한) */
+function walkTo(p, [x,z]){ x = Math.max(-4.6, Math.min(4.6, x)); z = Math.max(-2.3, Math.min(3.2, z)); p.target = new THREE.Vector3(x,0,z); return new Promise(r => p.onArrive = r); }
+/** 두 사람이 멈출 때까지 기다리기 */
+function waitArrive(){ return new Promise(r => { const chk = () => (!W.me.target && !W.se.target) ? r() : requestAnimationFrame(chk); chk(); }); }
+/** 한 걸음 진행 (걸을 때 살짝 통통) */
+function stepPerson(p, dt, t){
+  if(!p.target){ p.spr.position.y = 0; return; }
+  const d = p.target.clone().sub(p.g.position); d.y = 0; const len = d.length();
+  if(len < .05){ p.target = null; const f = p.onArrive; p.onArrive = null; f && f(); return; }
+  p.g.position.add(d.multiplyScalar(Math.min(1, p.speed*dt/len))); p.spr.position.y = Math.abs(Math.sin(t*12))*.04;
+}
+
+// ───────────────────────── 입력 ─────────────────────────
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+/** 화면 좌표 → 3D 광선 */
+function pick(ev, list){ const r = $('view').getBoundingClientRect(); mouse.set((ev.clientX-r.left)/r.width*2-1, -(ev.clientY-r.top)/r.height*2+1); ray.setFromCamera(mouse, camera); return ray.intersectObjects(list, false)[0]; }
+let mode = 'start';
+$('view').addEventListener('mousemove', ev => {
+  if(mode!=='laundry' || busy){ $('label').style.display='none'; $('view').classList.remove('hot'); return; }
+  const h = pick(ev, clickables); const L = $('label');
+  if(h){ L.textContent = h.object.userData.label; L.style.left = ev.clientX+14+'px'; L.style.top = ev.clientY-10+'px'; L.style.display='block'; $('view').classList.add('hot'); }
+  else { L.style.display='none'; $('view').classList.remove('hot'); }
+});
+document.addEventListener('click', async ev => {
+  if(advance){ advance(); return; }
+  if(mode!=='laundry' || busy || W.ending) return;
+  const h = pick(ev, clickables);
+  if(h){ const u = h.object.userData; busy = true; $('label').style.display='none';
+    const [sx,sz] = u.stand; await Promise.all([walkTo(W.me,[sx,sz]), walkTo(W.se,[sx+.7, sz+.5])]);
+    await runKnot(u.knot); afterKnot(u.knot); return; }
+  const f = pick(ev, [W.floor]); if(f){ walkTo(W.me,[f.point.x,f.point.z]); walkTo(W.se,[f.point.x+.7,f.point.z+.5]); }
+});
+document.addEventListener('keydown', ev => { if((ev.key===' '||ev.key==='Enter') && advance){ ev.preventDefault(); advance(); } });
+
+/** 유리문 밖을 비추는 카메라 (바깥이 바뀌는 순간에만) */
+function lookOut(){ camera.position.set(-3.4,1.5,-.9); camera.lookAt(-10,1.5,-2.2); if(W.sky){ W.sky.scale.y = 6; W.sky.position.y = 8; } }
+/** 원래 고정 카메라로 */
+function lookRoom(){ camera.position.set(.4,2.85,7.4); camera.lookAt(0,1.05,-1); if(W.sky){ W.sky.scale.y = 1; W.sky.position.y = 1.5; } }
+/** 대본 knot이 끝난 뒤 게임 상태 반영 */
+function afterKnot(k){
+  lookRoom();
+  if(k==='washer' && story.variablesState['washed']) W.myWash = true;
+  if(W.ending) finish();
+}
+
+/** 0장 끝: 뒷문 너머 → 초록 글자 화면 */
+async function finish(){
+  mode = 'end'; hum(30,0);
+  W.backLight.intensity = 6; await sleep(500); await fade(1,400);
+  const E = $('end'); E.style.display='block'; $('fade').style.opacity = 0; E.textContent = '';
+  const lines = ['C:\\>', '', '', '              1장으로 이어짐'];
+  for(const l of lines){ for(const ch of l){ E.textContent += ch; tone(900,.02,'square',.03); await sleep(30); } E.textContent += '\n'; await sleep(400); }
+}
+
+// ───────────────────────── 루프 ─────────────────────────
+function loop(){
+  const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
+  if(mode==='bus') busLights.forEach(l => { l.position.z += dt*7; if(l.position.z > 8) l.position.z -= 15.6; });
+  if(mode==='laundry' || mode==='end'){
+    stepPerson(W.me, dt, t); stepPerson(W.se, dt, t);
+    if(W.dryerSpin) W.dryers[2].rotation.z += dt*5;
+    if(W.myWash) W.myDrum.rotation.z += dt*7;
+    (W.cars||[]).forEach(c => { c.position.z += dt*9; if(c.position.z > 30) c.position.z = -30; });
+  }
+  renderer.render(scene, camera); requestAnimationFrame(loop);
+}
+
+// ───────────────────────── 시작 ─────────────────────────
+/** 그림·대본 불러오기 */
+async function load(){
+  const img = src => new Promise((res,rej) => loader.load(src, t => res(px(t)), undefined, rej));
+  [TEX.me, TEX.seoa] = await Promise.all([img('img/me-full.png'), img('img/seoa-full.png')]);
+  // 비공개 아티팩트에서는 대본이 같은 폴더에 있음 → 먼저 시도, 없으면 레포의 비밀 폴더
+  let r = await fetch('v4-ch0.ink').catch(() => null);
+  if(!r || !r.ok) r = await fetch(INK_URL);
+  const src = await r.text();
+  const c = new inkjs.Compiler(src); story = c.Compile();
+  if(c.errors.length) throw new Error(c.errors.join('\n'));
+}
+/** 0장 진행 순서 */
+async function play(){
+  mode = 'bus'; buildBus(); await fade(0,1200);
+  await runKnot('bus'); hum(30,0); await fade(1,1000);
+  mode = 'laundry'; buildLaundry(); await fade(0,1000);
+  await Promise.all([walkTo(W.me,[-2.6,1.2]), walkTo(W.se,[-2.2,1.9])]);
+  await runKnot('laundry_enter');
+}
+const ready = load().catch(e => { $('err').textContent = '불러오기 실패: ' + e.message + '\n(builds/digital-circus 폴더를 서버 루트로 열어야 대본을 읽을 수 있어)'; });
+loop();
+$('start').addEventListener('click', async ev => {
+  ev.stopPropagation(); initAudio(); $('start').style.display='none'; await ready; if(!story) return;
+  // 확인용: ?scene=laundry 로 빨래방부터
+  if(new URLSearchParams(location.search).get('scene')==='laundry'){ mode='laundry'; buildLaundry(); await fade(0,600); await runKnot('laundry_enter'); }
+  else play();
+});
+</script>
+</body>
+</html>
