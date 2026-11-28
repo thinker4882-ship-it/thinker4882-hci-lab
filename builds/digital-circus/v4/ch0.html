@@ -46,7 +46,7 @@
 <img id="stand" alt="">
 <div id="cross"></div>
 <div id="label"></div>
-<div id="hint">끌어서 둘러보기 · 눌러서 걷거나 살펴보기</div>
+<div id="hint">끌어서 둘러보기 · 눌러서 걷거나 살펴보기 · WASD로 걷기</div>
 <div id="box"><div class="name"></div><div class="text"></div><div class="next">▼</div></div>
 <div id="choices"></div>
 <div id="fade"></div>
@@ -223,11 +223,10 @@ function buildLaundry(){
   const lw = (z1,z2,y1,y2) => plane(z2-z1,y2-y1,wall,-4,(y1+y2)/2,(z1+z2)/2,0,Math.PI/2);
   lw(-3,-2.6,0,2.8); lw(-.2,.6,0,2.8); lw(2.2,3,0,2.8); lw(-2.6,-.2,0,.8); lw(-2.6,-.2,2.3,2.8); lw(.6,2.2,2.3,2.8);
   const glass = new THREE.MeshBasicMaterial({color:0xa8c8e8, transparent:true, opacity:.14, depthWrite:false});
-  plane(2.4,1.5,glass,-3.99,1.55,-1.4,0,Math.PI/2);
-  W.door = clickable(plane(1.6,2.3,glass.clone(),-3.98,1.15,1.4,0,Math.PI/2), '앞문 (자동문)', [-3.1,1.4], [-4,1.3,1.4], 'door');
+  clickable(plane(2.4,1.5,glass,-3.99,1.55,-1.4,0,Math.PI/2),'창밖',[-3.0,-1.4],[-4,1.5,-1.4],'window');
+  W.door = clickable(plane(1.6,2.3,glass.clone(),-3.98,1.15,1.4,0,Math.PI/2), '앞문', [-3.1,1.4], [-4,1.3,1.4], 'door');
   const frame = lam({color:0x8a8f96});
   box(.08,2.3,.06,frame,-3.98,1.15,.6); box(.08,2.3,.06,frame,-3.98,1.15,2.2); box(.08,.06,1.6,frame,-3.98,2.3,1.4);
-  plane(.4,.12,psx(new THREE.MeshBasicMaterial({map:signTex('자동문','#fff','#b00')})),-3.96,1.45,1.4,0,Math.PI/2);
   // 바깥: 어두운 밤거리 (자세한 모습은 바라볼 때 그림으로)
   plane(30,8,new THREE.MeshBasicMaterial({color:0x0b1020}),-12,3,0,0,Math.PI/2);
   plane(8,30,new THREE.MeshBasicMaterial({color:0x1a1c22}),-8,-.01,0,-Math.PI/2);
@@ -238,17 +237,17 @@ function buildLaundry(){
   for(let i=0;i<6;i++){ const x = -3.3+i*.82;
     const front = lam({map:TEX.washer});
     const w = box(.76,1,.7,[side,side,side,side,front,side],x,.5,-2.62);
-    const drum = new THREE.Mesh(new THREE.CircleGeometry(.2,10), psx(new THREE.MeshLambertMaterial({color:0x1c2733, transparent:true, opacity:.0}))); drum.position.set(x,.52,-2.26); scene.add(drum);
-    W.washers.push(drum); if(i===1){ clickable(w,'세탁기',[x,-1.35],[x,.6,-2.6],'washer'); W.myX = x; } }
+    if(i===1){ clickable(w,'세탁기',[x,-1.35],[x,.6,-2.6],'washer'); W.myX = x; } }
   // 내 세탁기 안에서 도는 빨래 (돌아갈 때만 보임)
-  W.myDrum = new THREE.Mesh(new THREE.CircleGeometry(.17,8), psx(new THREE.MeshBasicMaterial({map:canvasTex(8,8,(g)=>{g.fillStyle='#6b8fb5';g.fillRect(0,0,8,8);g.fillStyle='#e8e8e8';g.fillRect(0,0,5,3);g.fillStyle='#c46';g.fillRect(3,5,5,3);})})));
-  W.myDrum.position.set(W.myX,.53,-2.265); W.myDrum.visible = false; scene.add(W.myDrum);
+  // 세탁기 앞면 사진의 둥근 유리 자리에 '돌아가는 빨래' 사진을 겹치고, 사진(텍스처)만 돌림
+  W.myDrum = new THREE.Mesh(new THREE.CircleGeometry(.215,20), psx(new THREE.MeshLambertMaterial({map:TEX.drumWash})));
+  W.myDrum.position.set(W.myX,.51,-2.266); W.myDrum.visible = false; scene.add(W.myDrum);
   // 건조기 3대 (회색, 3번은 아무도 없는데 돌아감)
   W.dryers = [];
   for(let i=0;i<3;i++){ const x = 1.85+i*.8;
     const d = box(.74,1.6,.7,[side,side,side,side,lam({map:TEX.washer, color:0xbfc3c8}),side],x,.8,-2.62);
-    if(i===2){ const sp = new THREE.Mesh(new THREE.CircleGeometry(.17,8), psx(new THREE.MeshBasicMaterial({map:canvasTex(8,8,(g)=>{g.fillStyle='#444';g.fillRect(0,0,8,8);g.fillStyle='#b55';g.fillRect(0,0,4,3);g.fillStyle='#57b';g.fillRect(4,5,4,3);})})));
-      sp.position.set(x,.83,-2.265); scene.add(sp); W.dryerSpin = sp; clickable(d,'건조기',[x,-1.35],[x,.8,-2.6],'dryer'); } }
+    if(i===2){ const sp = new THREE.Mesh(new THREE.CircleGeometry(.215,20), psx(new THREE.MeshLambertMaterial({map:TEX.drumDry, emissive:0x2a1a08})));
+      sp.scale.y = 1.6; /* 앞면 사진이 세로로 늘어나 있어서 타원 */ sp.position.set(x,.816,-2.266); scene.add(sp); W.dryerSpin = sp; clickable(d,'건조기',[x,-1.35],[x,.8,-2.6],'dryer'); } }
   // 직원용 뒷문 (오른벽 안쪽, 돌쩌귀로 열림)
   W.back = new THREE.Group(); W.back.position.set(3.97,0,-2.2);
   const bd = new THREE.Mesh(new THREE.BoxGeometry(.05,2.1,.9), lam({color:0x6b4a3a})); bd.position.set(0,1.05,.45); bd.castShadow = true; W.back.add(bd);
@@ -264,14 +263,14 @@ function buildLaundry(){
   const board = canvasTex(64,40,(g)=>{ g.fillStyle='#a77a4c'; g.fillRect(0,0,64,40); const P=['#fff','#fff59d','#b3e5fc','#ffccbc','#fff','#c8e6c9'];
     for(let i=0;i<6;i++){ g.fillStyle=P[i]; g.fillRect(4+(i%3)*20,4+Math.floor(i/3)*18,14,14); g.fillStyle='#555'; for(let k=0;k<3;k++) g.fillRect(6+(i%3)*20,9+Math.floor(i/3)*18+k*3,10,1); }
     g.fillStyle='#e9f7f5'; g.fillRect(24,22,15,16); g.fillStyle='#4bb7b0'; g.fillRect(26,24,11,6); });
-  clickable(plane(1.4,.9,lam({map:board}),3.98,1.55,2.1,0,-Math.PI/2),'게시판',[3.0,2.1],[4,1.5,2.1],'board');
+  clickable(plane(1.35,.9,lam({map:TEX.board}),3.98,1.55,2.1,0,-Math.PI/2),'게시판',[3.0,2.1],[4,1.5,2.1],'board');
   // 의자 (가운데, 세탁기를 바라봄)
   const blue = lam({color:0x2f4f8f});
   const bench = box(2,.42,.5,blue,0,.21,.2); box(2,.5,.08,blue,0,.62,.45);
   clickable(bench,'의자',[-.45,.22],[-.45,.7,-2.6],'chair');
   // 서아 (서 있는 판 / 앉은 판)
   W.seoa = new THREE.Sprite(new THREE.SpriteMaterial({map:TEX.seoaStand, transparent:true, alphaTest:.5}));
-  W.seoa.center.set(.5,0); scene.add(W.seoa); placeSeoa('enter');
+  W.seoa.center.set(.5,0); scene.add(W.seoa); placeSeoa('bench');   // 들어오자마자 앉아서 기다림
   // 나 (카메라)
   W.pos = new THREE.Vector3(-3.1,0,1.4); W.yaw = -Math.PI/2 + .5; W.pitch = -.05; W.target = null; W.bob = 0;
 }
@@ -329,32 +328,46 @@ window.addEventListener('pointerup', async e => {
   const u = h.object.userData; busy = true; $('label').style.display = 'none';
   W.sitDrop = 0;
   await walkTo(u.stand, u.look);
-  placeSeoa(u.knot === 'chair' ? 'bench' : u.knot);
   await runKnot(u.knot); afterKnot(u.knot);
 });
-window.addEventListener('keydown', e => { if((e.key===' '||e.key==='Enter') && advance){ e.preventDefault(); advance(); } });
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if((e.key===' '||e.key==='Enter') && advance){ e.preventDefault(); advance(); } });
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+/** WASD·화살표: W/S 앞뒤, A/D 옆걸음, ←/→ 돌기 */
+function stepKeys(dt){
+  if(mode!=='laundry' || busy) return;
+  const f = (keys.w||keys.arrowup?1:0) - (keys.s||keys.arrowdown?1:0), st = (keys.d?1:0) - (keys.a?1:0), tr = (keys.arrowleft?1:0) - (keys.arrowright?1:0);
+  if(!f && !st && !tr) return;
+  W.target = null; W.sitDrop = 0; W.yaw += tr*dt*1.8;
+  const sp = 1.7*dt, sy = Math.sin(W.yaw), cy = Math.cos(W.yaw);
+  W.pos.x = Math.max(-3.6, Math.min(3.6, W.pos.x - sy*f*sp + cy*st*sp));
+  W.pos.z = Math.max(-1.75, Math.min(2.6, W.pos.z - cy*f*sp - sy*st*sp));
+  if(f || st) W.bob += dt*9;
+}
 
 /** 대본 knot이 끝난 뒤 게임 상태 반영 */
 function afterKnot(k){
   $('cg').style.opacity = 0;
   const v = n => story.variablesState[n];
   W.myDrum.visible = v('washed') && !v('waited');
-  if(k === 'chair' && v('waited') && !v('taken')) placeSeoa('washer');
   if(W.ending) finish();
 }
 
 // ───────────────────────── 연출 이벤트 (# ev:이름) ─────────────────────────
 const fade = (to, ms=800) => { $('fade').style.transition = `opacity ${ms}ms`; $('fade').style.opacity = to; return sleep(ms); };
+/** 제자리에서 고개만 돌리기 (대화 중 창밖을 볼 때) */
+async function turnTo(look){ W.target = {x:W.pos.x, z:W.pos.z, look}; await new Promise(r => W.onArrive = r); }
 /** 바깥을 보여 주는 한 장면 그림 */
 async function showCG(src){ const c = $('cg'); if(c.style.opacity==='1'){ c.style.opacity = 0; await sleep(700); } c.src = src; c.style.opacity = 1; stand.style.opacity = 0; await sleep(900); }
 const EV = {
   bus_hum(){ hum(55,.12); },
   laundry_hum(){ hum(100,.05); },
-  async sit(){ W.sitDrop = -.45; placeSeoa('bench'); },
+  async sit(){ W.sitDrop = -.45; },
   async timeskip(){ await fade(1,900); W.myDrum.visible = false; await sleep(800); await fade(0,900); },
   async flicker(){ for(const ms of [90,60,150]){ W.tubes.forEach(l=>l.intensity=0); await sleep(ms); W.tubes.forEach(l=>l.intensity=.75); await sleep(70); } },
-  async outside_1(){ await showCG('img/out-normal.jpg'); },
-  async outside_2(){ await sleep(400); await showCG('img/out-wrong.jpg'); },
+  async look_out(){ await turnTo([-4,1.5,-1.4]); await showCG('img/out-normal.jpg'); },
+  async look_back(){ $('cg').style.opacity = 0; stand.style.opacity = 1; await sleep(500); },
+  async outside_2(){ $('cg').style.opacity = 0; await turnTo([-4,1.5,-1.4]); await sleep(300); await showCG('img/out-wrong.jpg'); },
   async backdoor_open(){ $('cg').style.opacity = 0; for(let a=0;a<=.85;a+=.05){ W.back.rotation.y = -a; await sleep(30); } W.backLight.intensity = 2.4; },
   async go_through(){ W.ending = true; },
 };
@@ -372,8 +385,9 @@ function loop(){
   const dt = Math.min(clock.getDelta(), .05);
   if(mode==='laundry' || mode==='end'){
     stepPlayer(dt);
-    if(W.dryerSpin) W.dryerSpin.rotation.z += dt*5;
-    if(W.myDrum.visible) W.myDrum.rotation.z += dt*7;
+    TEX.drumDry.rotation -= dt*3.2;
+    if(W.myDrum.visible) TEX.drumWash.rotation -= dt*4;
+    stepKeys(dt);
     renderer.render(scene, camera);
   }
   requestAnimationFrame(loop);
@@ -383,8 +397,9 @@ function loop(){
 /** 그림·대본 불러오기 */
 async function load(){
   const img = src => new Promise((res,rej) => loader.load(src, t => res(px(t)), undefined, () => rej(new Error(src))));
-  [TEX.floor, TEX.washer, TEX.vending, TEX.seoaStand, TEX.seoaSit] = await Promise.all(
-    ['img/tex-floor.jpg','img/tex-washer.jpg','img/tex-vending.jpg','img/seoa-full.png','img/seoa-sit.png'].map(img));
+  [TEX.floor, TEX.washer, TEX.vending, TEX.seoaStand, TEX.seoaSit, TEX.drumWash, TEX.drumDry, TEX.board] = await Promise.all(
+    ['img/tex-floor.jpg','img/tex-washer.jpg','img/tex-vending.jpg','img/seoa-full.png','img/seoa-sit.png','img/tex-drum-wash.jpg','img/tex-drum-dry.jpg','img/tex-board.jpg'].map(img));
+  [TEX.drumWash, TEX.drumDry].forEach(t => t.center.set(.5,.5));   // 가운데를 축으로 돌림
   ['calm','smile','worry'].forEach(f => { new Image().src = `img/vn-seoa-${f}.png`; });   // 미리 받아 두기
   ['img/bg-bus.jpg','img/out-normal.jpg','img/out-wrong.jpg'].forEach(s => { new Image().src = s; });
   // 비공개 아티팩트에서는 대본이 같은 폴더에 있음 → 먼저 시도, 없으면 레포의 비밀 폴더
