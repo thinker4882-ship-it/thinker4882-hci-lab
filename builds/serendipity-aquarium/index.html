@@ -36,6 +36,21 @@
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
   button { font:inherit; font-size:.9rem; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; }
   button.primary { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  button:hover { border-color:var(--sub); }
+  button:active { transform:translateY(1px) scale(.98); }
+  /* 지금 켜진 장면·속도: 눌렀는지 바로 보이게 */
+  button[aria-pressed="true"] { background:var(--s1); color:#fff; border-color:var(--s1); font-weight:600; }
+  .guide { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin:14px 0 4px; }
+  .guide > div { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:.88rem; }
+  .guide h3 { font-size:.95rem; margin:0 0 4px; }
+  .guide p, .guide ul { margin:0; }
+  .guide ul { padding-left:18px; }
+  details { font-size:.88rem; margin:8px 0; }
+  details dt { font-weight:600; margin-top:6px; }
+  details dd { margin:0 0 0 12px; color:var(--sub); }
+  .status { font-size:.85rem; color:var(--s1); font-weight:600; min-height:1.4em; }
+  .insight { font-size:.9rem; }
+  .insight li { margin-bottom:6px; }
   button:focus-visible, input:focus-visible { outline:2px solid var(--s1); outline-offset:2px; }
   .hint { font-size:.85rem; color:var(--sub); }
   .charts { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
@@ -51,18 +66,46 @@
 <body>
 <main>
   <h1>세렌디피티 수족관</h1>
-  <div class="sub">사람들이 사무실을 돌아다니다 만나면 해법을 따라 하거나, 섞어서 새 해법을 만듭니다(불꽃). 연결 방식을 바꾸면 집단이 문제를 얼마나 잘 푸는지 봅니다.</div>
+  <div class="sub">60명이 한 팀이 되어 <b>가장 맛있는 새 라면 레시피</b>를 찾고 있습니다. 사람도, 문제도 그대로 두고 <b>사무실 구조(누가 누구와 마주치기 쉬운가)</b>만 바꿨을 때, 팀이 얼마나 맛있는 레시피에 도달하는지 지켜보는 모형입니다.</div>
+
+  <!-- 처음 보는 사람용 안내: 문제 → 사람 → 협력 → 결과 -->
+  <div class="guide">
+    <div><h3>① 문제: 레시피 지도</h3>
+      <p>오른쪽 지도의 한 지점이 레시피 하나입니다. <b>가로 = 재료, 세로 = 조리법.</b> 진한 파랑일수록 맛있습니다(점수 0~1). 맛있는 곳(봉우리)이 여기저기 흩어져 있어서, 지금 레시피 근처만 조금씩 고치면 작은 봉우리에 갇힙니다.</p></div>
+    <div><h3>② 사람: 각자 레시피 하나</h3>
+      <p>점 하나가 한 사람이고, 저마다 레시피 하나를 들고 있습니다. <b>왼쪽 사무실과 오른쪽 지도에는 같은 사람이 같은 색으로 나옵니다.</b> 색이 같으면 같은 레시피를 들고 있다는 뜻입니다. <b>굵은 테두리 점</b> 하나를 양쪽에서 따라가 보세요.</p></div>
+    <div><h3>③ 협력: 세 가지 행동</h3>
+      <ul>
+        <li><b>혼자 궁리</b>: 내 레시피를 살짝 바꿔 보고, 더 맛있으면 바꾼다.</li>
+        <li><b>따라 하기</b> <span style="color:var(--sub)">(회색 선)</span>: 같은 방에서 마주친 사람 레시피가 더 맛있으면 그대로 따라 한다.</li>
+        <li><b>섞기 = 불꽃</b> <span style="color:var(--spark)">(주황 원)</span>: 레시피가 적당히 다르면 "내 재료 + 네 조리법"으로 바꿔 끼워 본다. 둘 중 누구 것보다도 맛있으면 둘 다 그 새 레시피로 옮긴다. 너무 비슷하면 섞어 봐야 같고, 너무 다르면 말이 안 통한다.</li>
+      </ul></div>
+    <div><h3>④ 결과: 무엇을 보나</h3>
+      <p>벽·통로·광장이 바뀌면 누가 누구를 만나는지가 바뀌고, 그래서 따라 하기와 섞기가 얼마나 자주 일어나는지가 바뀝니다. 그 결과로 <b>평균 점수</b>(60명 레시피 맛의 평균 = 팀 전체 실력), <b>최고 점수</b>(가장 맛있는 한 명), <b>살아남은 레시피 수</b>(서로 다른 레시피가 몇 개 남았나 = 다양성)를 봅니다.</p></div>
+  </div>
+  <details>
+    <summary>용어 풀이</summary>
+    <dl>
+      <dt>틱</dt><dd>시뮬레이션의 한 걸음. 1틱마다 모두가 한 발짝 걷고, 10% 확률로 혼자 궁리합니다. 3,000틱이 한 판입니다.</dd>
+      <dt>지형</dt><dd>레시피 지도의 울퉁불퉁한 모양 = 문제 그 자체. 어디가 맛있는지는 아무도 모르고, 직접 맛을 봐야 압니다.</dd>
+      <dt>지형 흔들기</dt><dd>문제가 바뀌는 순간. 손님 입맛이 바뀌어 맛있는 곳이 달라졌다고 보면 됩니다. 사람들은 들고 있던 레시피 그대로 새 지도에 놓입니다.</dd>
+      <dt>방·벽</dt><dd>벽 너머 사람과는 못 만납니다. 방이 9개면 대부분 자기 방 사람만 만납니다.</dd>
+      <dt>통로</dt><dd>자기 방을 나가 다른 곳에 잠깐 들렀다 오는 빈도.</dd>
+      <dt>광장</dt><dd>가운데 둥근 공간. 켜면 방을 나간 사람이 모두 광장으로 모여서, 다른 방 사람과 섞입니다(탕비실·라운지 같은 곳).</dd>
+      <dt>리듬</dt><dd>일정 시간은 아무도 만나지 않고 혼자 궁리만 하는 시간의 비율. 70%면 200틱 중 140틱은 혼자, 60틱만 만납니다.</dd>
+    </dl>
+  </details>
 
   <div class="boards">
     <div class="board">
-      <h2>사무실</h2>
+      <h2>사무실 (누가 누구를 만나나)</h2>
       <canvas id="office" width="440" height="440" aria-label="사무실: 방, 통로, 광장과 돌아다니는 사람들"></canvas>
-      <div class="hint">점의 색 = 들고 있는 해법의 위치. 색이 같아지면 생각이 같아진 것.</div>
+      <div class="hint">점 = 사람, 색 = 들고 있는 레시피. 회색 선 = 따라 하기, 주황 원 = 섞어서 더 맛있는 레시피를 찾음(불꽃).</div>
     </div>
     <div class="board">
-      <h2>아이디어 지도</h2>
-      <canvas id="idea" width="440" height="440" aria-label="아이디어 지도: 진할수록 좋은 해법"></canvas>
-      <div class="hint">진할수록 높은 점수. 봉우리가 여럿이라 가까운 곳만 보면 작은 봉우리에 갇힙니다.</div>
+      <h2>레시피 지도 (그 사람이 어떤 레시피를 들고 있나)</h2>
+      <canvas id="idea" width="440" height="440" aria-label="레시피 지도: 진할수록 맛있는 레시피"></canvas>
+      <div class="hint">가로 = 재료, 세로 = 조리법, 진할수록 맛있음. 점들이 진한 곳으로 모여 가면 팀이 문제를 풀어 가는 중입니다.</div>
     </div>
   </div>
   <div class="stats" id="liveStats"></div>
@@ -72,34 +115,58 @@
     <label for="rooms">방 개수 <span class="v" id="roomsV"></span>
       <input type="range" id="rooms" min="0" max="2" step="1" value="2"></label>
     <label for="corridor">통로 (방 밖으로 나가는 빈도) <span class="v" id="corridorV"></span>
-      <input type="range" id="corridor" min="0" max="10" step="1" value="2"></label>
+      <input type="range" id="corridor" min="0" max="10" step="0.5" value="2"></label>
     <label for="solo">리듬 (혼자 생각하는 시간 비율) <span class="v" id="soloV"></span>
       <input type="range" id="solo" min="0" max="90" step="10" value="0"></label>
     <label for="plaza" style="flex-direction:row; align-items:center; gap:6px">
       <input type="checkbox" id="plaza"> 광장 (나가면 가운데 광장으로 모임)</label>
   </div>
   <div class="row">
+    <span class="hint">장면:</span>
+    <button data-preset="0" title="방 9개, 거의 안 나감">칸막이 사무실</button>
+    <button data-preset="1" title="벽 없음, 누구나 마주침">완전 개방</button>
+    <button data-preset="2" title="방 9개, 가끔 가운데 광장에서 다른 방 사람과 섞임">통로·광장</button>
+    <button data-preset="3" title="벽 없음, 시간의 70%는 혼자 궁리">개방 + 리듬</button>
+  </div>
+  <div class="row">
     <button class="primary" id="btnPlay">일시정지</button>
     <button id="btnShake">지형 흔들기</button>
     <button id="btnReset">처음부터</button>
-    <span class="hint">장면:</span>
-    <button data-preset="0">칸막이 사무실</button>
-    <button data-preset="1">완전 개방</button>
-    <button data-preset="2">통로·광장</button>
-    <button data-preset="3">개방 + 리듬</button>
+    <span class="hint">속도:</span>
+    <button data-speed="0.25">느리게</button>
+    <button data-speed="0.5">보통</button>
+    <button data-speed="3">빠르게</button>
   </div>
+  <div class="status" id="status" aria-live="polite"></div>
 
   <!-- 비교 실험 (기획: 진단 → 처방 → 전후 비교) -->
   <div class="board" style="margin-top:18px">
     <h2>비교 실험</h2>
-    <div class="hint">네 장면을 같은 지형에서 3,000틱씩 돌리고, 1,500틱에 지형을 흔듭니다. 지형 24개로 반복해 평균을 냅니다 (8개로는 지형 운에 따라 순위가 뒤바뀌었어요).</div>
+    <p class="insight"><b>질문: 어떤 사무실 구조가 팀을 더 맛있는 레시피로 이끌까?</b><br>
+      위 네 장면에 <b>똑같은 사람, 똑같은 문제</b>를 주고 3,000틱씩 돌립니다. 중간(1,500틱)에 지형을 흔들어, 문제가 바뀌었을 때 얼마나 빨리 다시 맛있는 곳을 찾는지도 봅니다. 한 번만 돌리면 그 문제가 어느 장면에 유리했는지(운)에 좌우되므로, 서로 다른 지형 24개로 반복해 평균을 냅니다.</p>
+    <ul class="insight">
+      <li><b>칸막이 사무실</b>: 방 9개, 거의 나가지 않음. 자기 방 사람만 만난다.</li>
+      <li><b>완전 개방</b>: 벽 없음. 지나가다 누구와도 마주친다.</li>
+      <li><b>통로·광장</b>: 방 9개지만 가끔 가운데 광장에 나와 다른 방 사람과 섞인다.</li>
+      <li><b>개방 + 리듬</b>: 벽 없음. 하지만 시간의 70%는 아무도 만나지 않고 혼자 궁리한다.</li>
+    </ul>
     <div class="row"><button class="primary" id="btnCompare">비교 실험 돌리기</button><span class="hint" id="cmpMsg"></span></div>
     <div class="legend" id="legend"></div>
     <div class="charts">
-      <div><div class="hint">평균 점수 (집단이 들고 있는 해법의 평균 높이)</div><canvas id="chMean" width="460" height="260"></canvas></div>
-      <div><div class="hint">살아남은 서로 다른 해법 수</div><canvas id="chDiv" width="460" height="260"></canvas></div>
+      <div><div class="hint">평균 점수: 60명 레시피 맛의 평균 (높을수록 팀 전체가 맛있는 곳에 있음). 가로축 = 시간(틱)</div><canvas id="chMean" width="460" height="260"></canvas></div>
+      <div><div class="hint">살아남은 레시피 수: 서로 다른 레시피가 몇 개 남았나 (높을수록 다양함)</div><canvas id="chDiv" width="460" height="260"></canvas></div>
     </div>
     <div class="tablewrap" id="cmpTable"></div>
+
+    <h2 style="margin-top:16px">무엇을 알게 됐나</h2>
+    <div class="hint">지형 30개로 점검한 결과(README). 위 버튼으로 돌린 결과와 숫자는 조금 다를 수 있지만 방향은 같습니다.</div>
+    <ol class="insight">
+      <li><b>자주 만날수록 빨리 한곳으로 모인다.</b> 문제가 그대로일 때는 완전 개방의 평균 점수가 조금 더 높았습니다. 맛있는 레시피를 찾은 사람이 생기면 마주치는 사람마다 따라 해서 금방 퍼지기 때문입니다. 대신 다들 같은 레시피로 몰려 다양성이 줄어듭니다.</li>
+      <li><b>혼자 있는 시간은 다양성을 지켰지만, 맛으로 이어지지 않았다.</b> 개방 + 리듬은 끝까지 서로 다른 레시피를 가장 많이 남겼는데(완전 개방보다 약 2개 더), 평균 점수는 오히려 가장 낮았습니다. "다양하면 좋은 아이디어가 나온다"가 저절로 성립하지는 않는다는 뜻입니다. <i>왜 그랬는지가 다음 질문입니다.</i></li>
+      <li><b>문제가 바뀌었을 때는 통로·광장이 가장 빨리 회복했다.</b> 지형을 흔들고 200틱 뒤 평균 점수가 완전 개방보다 약 0.09 높았습니다.</li>
+      <li><b>충분히 오래 돌리면 네 장면의 차이는 잡음 수준이다.</b> 구조는 '어디까지 가나'보다 '얼마나 빨리 가나, 바뀌면 얼마나 빨리 다시 찾나'에 더 영향을 줬습니다.</li>
+    </ol>
+    <div class="hint">주의: 이 결과는 위 세 가지 행동 규칙을 가정했을 때의 결과입니다. 규칙이 바뀌면 결과도 바뀔 수 있습니다.</div>
   </div>
 </main>
 <div class="tip" id="tip" hidden></div>
@@ -171,7 +238,7 @@ function makeWorld(cfg, seed) {
     agents.push({ ox, oy, h: rng() * 6.283, home, state: 'home', tx: 0, ty: 0, t: 0, sx, sy, score: height(L, sx, sy), cd: 0 });
   }
   const visited = new Set();
-  return { cfg, rng, L, O, agents, tick: 0, sparks: 0, bigSparks: 0, events: [], visited };
+  return { cfg, rng, L, O, agents, tick: 0, sparks: 0, bigSparks: 0, copies: 0, events: [], visited };
 }
 /** 한 사람을 한 틱 움직인다: 방 안을 거닐다 가끔 밖(다른 방이나 광장)에 나갔다 돌아온다 */
 function move(W, a) {
@@ -226,6 +293,7 @@ function meet(W, a, b) {
   if (hi.score > lo.score + 1e-6) {
     const x = clamp01(hi.sx + gauss(rng) * P.copyNoise), y = clamp01(hi.sy + gauss(rng) * P.copyNoise);
     lo.sx = x; lo.sy = y; lo.score = height(L, x, y);
+    W.copies++;
     return { type: 'copy' };
   }
   return null;
@@ -245,7 +313,7 @@ function step(W) {
         if (Math.hypot(A[i].ox - A[j].ox, A[i].oy - A[j].oy) > P.meetR) continue;
         const ev = meet(W, A[i], A[j]);
         A[i].cd = A[j].cd = P.cooldown;
-        if (ev && ev.type === 'spark') W.events.push({ ...ev, t: W.tick });
+        if (ev) W.events.push({ ...ev, i, j, t: W.tick }); // 화면에서 누가 누구와 무엇을 했는지 선으로 보여 주려고 둘 다 기록
         break;
       }
     }
@@ -313,7 +381,7 @@ function showValues() {
 }
 /** 손잡이를 바꾸면 사람과 지형은 그대로 두고 사무실만 바꾼다 */
 function applyCfg() {
-  showValues();
+  showValues(); markPreset();
   const c = readCfg();
   W.cfg = c;
   if (W.O.cells.length !== c.rooms || !!W.O.plaza !== c.plaza) {
@@ -326,9 +394,20 @@ function reset() { W = makeWorld(readCfg(), Math.floor(Math.random() * 1e9)); he
 /** 장면 버튼: 손잡이를 그 장면 값으로 맞춘다 */
 function loadPreset(i) {
   const p = PRESETS[i];
-  $('rooms').value = ROOMS.indexOf(p.rooms); $('corridor').value = Math.round(p.corridor * 1000); $('solo').value = Math.round(p.solo * 100); $('plaza').checked = p.plaza;
+  $('rooms').value = ROOMS.indexOf(p.rooms); $('corridor').value = p.corridor * 1000; $('solo').value = Math.round(p.solo * 100); $('plaza').checked = p.plaza;
   applyCfg();
+  say(`장면: ${p.name}`);
 }
+/** 지금 손잡이 값과 같은 장면 버튼만 눌린 상태로 표시한다 */
+function markPreset() {
+  const c = readCfg();
+  document.querySelectorAll('[data-preset]').forEach(b => {
+    const p = PRESETS[+b.dataset.preset];
+    b.setAttribute('aria-pressed', p.rooms === c.rooms && Math.abs(p.corridor - c.corridor) < 1e-9 && p.plaza === c.plaza && Math.abs(p.solo - c.solo) < 1e-9);
+  });
+}
+/** 버튼을 누른 결과를 한 줄로 알린다 */
+function say(msg) { $('status').textContent = msg; }
 /** 해법 위치 → 색 (지도 위 각도로 색상, 가운데 가까울수록 옅게) */
 function solColor(a) {
   const hue = (Math.atan2(a.sy - 0.5, a.sx - 0.5) / (2 * Math.PI) * 360 + 360) % 360;
@@ -360,15 +439,33 @@ function drawOffice() {
     }
   }
   g.strokeRect(1, 1, S - 2, S - 2);
+  drawMeetLines(g, S);
   for (const a of W.agents) { g.fillStyle = solColor(a); g.beginPath(); g.arc(a.ox * S, a.oy * S, 5, 0, 6.283); g.fill(); }
+  drawFollowed(g, S, W.agents[0].ox, W.agents[0].oy);
   drawSparks(g, S, 'ox', 'oy');
-  if (isSoloPhase(W)) { g.fillStyle = css('--sub'); g.font = '13px sans-serif'; g.fillText('혼자 생각하는 시간', 8, 18); }
+  if (isSoloPhase(W)) { g.fillStyle = css('--ink'); g.font = 'bold 13px sans-serif'; g.fillText('혼자 궁리하는 시간 (아무도 만나지 않음)', 8, 18); }
+}
+/** 방금 만난 두 사람을 선으로 잇는다: 회색 = 따라 하기, 주황 = 섞기(불꽃) */
+function drawMeetLines(g, S) {
+  for (const e of W.events) {
+    const age = W.tick - e.t; if (age > 30) continue;
+    const a = W.agents[e.i], b = W.agents[e.j];
+    g.strokeStyle = e.type === 'spark' ? css('--spark') : css('--sub');
+    g.globalAlpha = 1 - age / 30; g.lineWidth = e.type === 'spark' ? 3 : 1.5;
+    g.beginPath(); g.moveTo(a.ox * S, a.oy * S); g.lineTo(b.ox * S, b.oy * S); g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+/** 따라가 볼 한 사람(0번)에 굵은 테두리를 그린다: 두 판의 같은 사람을 이어 보게 */
+function drawFollowed(g, S, x, y) {
+  g.strokeStyle = css('--ink'); g.lineWidth = 2.5;
+  g.beginPath(); g.arc(x * S, y * S, 9, 0, 6.283); g.stroke();
 }
 /** 최근 불꽃을 그린다 (40틱 동안 퍼지며 사라짐) */
 function drawSparks(g, S, kx, ky) {
   g.strokeStyle = css('--spark');
   for (const e of W.events) {
-    const age = W.tick - e.t; if (age > 40) continue;
+    const age = W.tick - e.t; if (e.type !== 'spark' || age > 40) continue;
     g.globalAlpha = 1 - age / 40; g.lineWidth = 2;
     g.beginPath(); g.arc(e[kx] * S, e[ky] * S, 6 + age * 0.5, 0, 6.283); g.stroke();
   }
@@ -383,16 +480,20 @@ function drawIdea() {
     g.fillStyle = solColor(a); g.strokeStyle = '#fff'; g.lineWidth = 1.5;
     g.beginPath(); g.arc(a.sx * S, a.sy * S, 4.5, 0, 6.283); g.fill(); g.stroke();
   }
+  drawFollowed(g, S, W.agents[0].sx, W.agents[0].sy);
   drawSparks(g, S, 'sx', 'sy');
+  g.fillStyle = css('--sub'); g.font = '11px sans-serif'; g.fillText('재료 →', S - 48, S - 6);
+  g.save(); g.translate(12, 56); g.rotate(Math.PI / 2); g.fillText('조리법 →', 0, 0); g.restore();
 }
 /** 판 아래 숫자 */
 function drawStats() {
   const m = measure(W);
-  $('liveStats').innerHTML = `<span>틱 <b>${W.tick}</b></span><span>평균 점수 <b>${m.mean.toFixed(2)}</b></span><span>최고 점수 <b>${m.best.toFixed(2)}</b></span><span>살아남은 해법 <b>${m.distinct}</b>개</span><span>불꽃 <b>${W.sparks}</b>번 (먼 조합 ${W.bigSparks})</span>`;
+  $('liveStats').innerHTML = `<span>시간 <b>${W.tick}</b>틱</span><span title="60명 레시피 맛의 평균">평균 점수 <b>${m.mean.toFixed(2)}</b></span><span title="가장 맛있는 한 명의 점수">최고 점수 <b>${m.best.toFixed(2)}</b></span><span title="서로 다른 레시피가 몇 개 남았나">살아남은 레시피 <b>${m.distinct}</b>개</span><span>따라 하기 <b>${W.copies}</b>번</span><span>불꽃 <b>${W.sparks}</b>번</span>`;
 }
-/** 애니메이션: 프레임마다 2틱 */
+let speed = 0.25, acc = 0;
+/** 애니메이션: 속도(프레임당 틱)만큼 진행. 느리게 = 4프레임에 1틱 */
 function loop() {
-  if (playing) { step(W); step(W); W.events = W.events.filter(e => W.tick - e.t <= 40); }
+  if (playing) { acc += speed; while (acc >= 1) { step(W); acc--; } W.events = W.events.filter(e => W.tick - e.t <= 40); }
   drawOffice(); drawIdea(); drawStats();
   requestAnimationFrame(loop);
 }
@@ -407,7 +508,7 @@ function drawChart(cv, key, yMax, hoverT) {
   g.fillStyle = css('--panel'); g.fillRect(0, 0, Wd, H);
   g.strokeStyle = css('--line'); g.fillStyle = css('--sub'); g.font = '11px sans-serif'; g.lineWidth = 1;
   for (let i = 0; i <= 4; i++) { const v = yMax * i / 4, y = Y(v); g.beginPath(); g.moveTo(pad.l, y); g.lineTo(Wd - pad.r, y); g.stroke(); g.fillText(key === 'mean' ? v.toFixed(2) : v.toFixed(0), 2, y + 4); }
-  for (const t of [0, 1500, 3000]) g.fillText(t, X(t) - 10, H - 6);
+  for (const t of [0, 1500, 3000]) g.fillText(t + (t === 3000 ? '틱' : ''), X(t) - 10, H - 6);
   g.setLineDash([4, 4]); g.strokeStyle = css('--sub'); g.beginPath(); g.moveTo(X(1500), pad.t); g.lineTo(X(1500), H - pad.b); g.stroke(); g.setLineDash([]);
   g.fillText('지형 흔들기', X(1500) + 4, pad.t + 10);
   const ends = CMP.map((c, i) => ({ i, y: Y(c.series.at(-1)[key]) })).sort((a, b) => a.y - b.y);
@@ -446,13 +547,16 @@ $('btnCompare').onclick = () => {
   $('cmpMsg').textContent = '계산 중… (몇 초 걸려요)';
   setTimeout(() => { const t0 = performance.now(); CMP = compare(); renderCompare(); $('cmpMsg').textContent = `완료 (${((performance.now() - t0) / 1000).toFixed(1)}초)`; }, 30);
 };
-$('btnPlay').onclick = () => { playing = !playing; $('btnPlay').textContent = playing ? '일시정지' : '재생'; };
-$('btnShake').onclick = () => { shake(W); heat = null; };
-$('btnReset').onclick = reset;
+$('btnPlay').onclick = () => { playing = !playing; $('btnPlay').textContent = playing ? '일시정지' : '재생'; say(playing ? '다시 움직입니다' : '멈췄습니다'); };
+$('btnShake').onclick = () => { shake(W); heat = null; say(`${W.tick}틱: 지형을 흔들었습니다. 손님 입맛이 바뀌어 맛있는 곳이 달라졌어요. 점들이 새 봉우리를 얼마나 빨리 찾는지 보세요.`); };
+$('btnReset').onclick = () => { reset(); markPreset(); say('새 지형, 새 레시피로 처음부터 시작합니다'); };
 for (const id of ['rooms', 'corridor', 'solo', 'plaza']) $(id).addEventListener('input', applyCfg);
 document.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => loadPreset(+b.dataset.preset));
+/** 속도 버튼: 누른 것만 눌린 상태로 */
+function setSpeed(v) { speed = v; document.querySelectorAll('[data-speed]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.speed === v)); }
+document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { setSpeed(+b.dataset.speed); say(`속도: ${b.textContent}`); });
 
-reset(); loadPreset(2); loop();
+reset(); loadPreset(2); setSpeed(0.25); say('');  loop();
 </script>
 </body>
 </html>
