@@ -12,23 +12,26 @@ v3 첫 판 후기 → 서사 깊이 파기(`../design/v3-why-chain.md`) → 말�
 
 **정웅 가설 (만들기 전)**: 일상 장면이라 크게 섬뜩하지는 않을 수도. 그래도 제일 섬뜩할 순간은 **문이 잠길 때, 또는 바깥에 이상한 풍경이 보일 때**.
 
-## 0장 실행
-- 비공개 아티팩트: https://claude.ai/artifact/KSGtnnYirAayiCikeJYVsB (아티팩트에서는 도트 글꼴 Galmuri가 막혀서 기본 글꼴로 보임)
-- 로컬: 미리보기 `circus-v4` (`.claude/launch.json`, 서버 루트 = `builds/digital-circus`) → `localhost:8769/v4/ch0.html`. 대본을 `../script/secret/`에서 읽어서 루트가 이 폴더여야 해. `?scene=laundry`면 빨래방부터(확인용).
-- 그림: 주인공·서아 전신은 힉스필드 gpt_image_2_6(서아 D를 참조) → 배경 제거 → 256px로 줄임. 원본 job ID: 서아 1b49da68-a499-4dc4-a4e3-53de41573ece, 주인공 8bc5ae7c-fc9e-4d38-9f16-776e3c8ddaab.
+## 0장 둘째 판 (11/28, 첫 판 후기 반영)
+정웅 결정: 현실 파트 = **PS1~2풍 사실적 3D + 대화는 미연시**. 세계마다 형식이 바뀜(채팅창 2D, 들판은 그때 정함, 서커스·리미널 1인칭 3D). 후기: `../playtest/v4-ch0-user-review.md`.
+
+- 비공개 아티팩트: https://claude.ai/artifact/KSGtnnYirAayiCikeJYVsB
+- 로컬: 미리보기 `circus-v4` (서버 루트 = `builds/digital-circus`) → `localhost:8769/v4/ch0.html`. `?scene=laundry`면 빨래방부터(확인용).
+- 조작: 끌어서 둘러보기, 눌러서 걷기·살펴보기 (패드 터치 가능), 대사는 누르거나 스페이스.
+- 그림(힉스필드 gpt_image_2_6): 버스 배경, 바깥 두 장(평소 / 이상해진 거리), 바닥·세탁기·자판기 질감, 앉은 서아(서아 D 참조, 배경 제거). 미연시 얼굴은 기존 서아 D 표정 3장. 원본은 `../assets/v4src/`(로컬).
 
 ## 판별 지도: 결정 → 맡은 곳 (`ch0.html`에서 검색)
 | 결정 | 맡은 곳 |
 |---|---|
-| 대사는 코드와 분리 (Ink) | `runKnot`(대본 한 장면 돌리기), `handleTags`(# face/sfx/ev 태그 → 연출), 대본은 `../script/secret/v4-ch0.ink` |
-| 말투 가이드 → 다른 모델 다듬기 | 대본 쪽 (Claude 초안 → Sonnet이 가이드대로 다듬음) |
-| 엔다코피아풍: 저폴리 방 + 2D 판 캐릭터 | `buildBus`, `buildLaundry`, `makePerson`(카메라를 바라보는 판 + 발밑 그림자), 저해상도 `LOW_W/LOW_H` |
-| 화면 아래 큰 자막, 서아 얼굴 | `showLine`, `#box`, `#portrait` |
-| 클릭으로 걷기, 물건 누르기 | `click` 핸들러, `clickable`(이름표·다가설 자리·대본 장면), `walkTo`, `stepPerson` |
-| 앞문 잠김 → 바깥이 이상해짐 (가설 지점) | `EV.outside_1`·`EV.outside_2`, `buildOutside(stage)`, 창밖 카메라 `lookOut` |
-| 뒷문이 자연스럽게 열림 → 뒤로 나감 | `EV.backdoor_open`(문이 돌쩌귀로 열리고 빛), `EV.go_through`, `finish` |
-| 혼자 도는 건조기, 형광등 깜빡 | `loop`의 `W.dryerSpin`, `EV.flicker` |
-| 소리 (합성음) | `SFX`, `hum`, `tone`, `noise` |
+| 대사는 코드와 분리 (Ink) | `runKnot`, `handleTags`(# face/sfx/ev), 대본 `../script/secret/v4-ch0.ink` |
+| 버스 = 미연시 (배경 + 서아 상반신 + 선명한 대화창·선택창) | `playBus`, `showLine`, `showStand`, `showChoices`, CSS `#box`·`#choices` |
+| 빨래방 = 1인칭 PS1~2풍 3D | `buildLaundry`, `psx`(꼭짓점 떨림), 저해상도 `LOW_W/LOW_H`, 사진 질감 `TEX.*` |
+| 걷기·둘러보기 (걷는 그림 문제를 1인칭으로 없앰) | `pointerdown/move/up` 핸들러, `walkTo`, `stepPlayer` |
+| 서아는 자리마다 서 있거나 앉아 있음 (자판기 속·안 앉음 버그 해결) | `SEOA_SPOTS`, `placeSeoa`, `EV.sit` |
+| 빨래방 대화도 미연시 창 | `runKnot`의 `mode==='laundry'` 부분(화면 어둡게 + 상반신) |
+| 바깥 풍경 = 선명한 한 장면 그림 (가설 지점) | `showCG`, `EV.outside_1`(평소 거리) → `EV.outside_2`(이상해진 거리) |
+| 뒷문이 열림 → 뒤로 나감 | `EV.backdoor_open`, `EV.go_through`, `finish` |
+| 서사 1~3 수정 (세제는 자판기에서 / 건조기는 한 번만 / 꺼낸 뒤 의자 대사) | 대본 쪽 (`washer`, `vending`, `dryer`, `chair` 장면) |
 
 ## 해 본 결과
 (체험 뒤 채움)
